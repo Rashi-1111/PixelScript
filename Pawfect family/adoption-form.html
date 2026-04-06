@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adoption Form</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        .navbar {
+            background-color: #000;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .navbar-brand, .nav-link {
+            color: #fff !important;
+        }
+        body {
+            background-color: #fafafa;
+        }
+        .form-container {
+            max-width: 600px;
+            margin: 50px auto;
+            background: #fff;
+            padding: 40px;
+            border-radius: 18px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="index.html">Pawfect Match</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto" id="navbarItems">
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="browse-pets.html">Browse Pets</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="form-container">
+            <h1 class="text-center mb-4">Adoption Application</h1>
+            <div id="petInfo" class="mb-4" style="display: none;">
+                <div class="alert alert-info">
+                    <strong>Applying to adopt:</strong> <span id="petNameDisplay"></span>
+                </div>
+            </div>
+            <form id="adoptionForm">
+                <input type="hidden" id="petId" name="petId">
+                <input type="hidden" id="petName" name="petName">
+                
+                <div class="mb-3">
+                    <label for="name" class="form-label">Your Full Name *</label>
+                    <input type="text" id="name" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label for="email" class="form-label">Email Address *</label>
+                    <input type="email" id="email" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label for="phone" class="form-label">Phone Number *</label>
+                    <input type="tel" id="phone" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label for="address" class="form-label">Home Address *</label>
+                    <textarea id="address" class="form-control" rows="2" required></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="experience" class="form-label">Experience with Pets</label>
+                    <textarea id="experience" class="form-control" rows="3" placeholder="Tell us about your experience with pets..."></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="message" class="form-label">Why do you want to adopt this pet?</label>
+                    <textarea id="message" class="form-control" rows="3" placeholder="Share your story..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-warning w-100">Submit Application</button>
+                <div id="messageDiv" class="mt-3"></div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Get pet ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const petId = urlParams.get('petId');
+
+        window.addEventListener('DOMContentLoaded', () => {
+            checkAuth();
+            if (petId) {
+                loadPetInfo(petId);
+            }
+            // Auto-fill user email if logged in
+            const user = JSON.parse(localStorage.getItem('user'));
+            if (user) {
+                document.getElementById('email').value = user.email;
+                document.getElementById('name').value = user.name;
+                // Check if user already has a request for this pet
+                checkExistingRequest(user.email);
+            }
+        });
+
+        async function checkExistingRequest(email) {
+            try {
+                const res = await fetch(`http://localhost:5000/api/adoption?email=${encodeURIComponent(email)}`);
+                if (!res.ok) return;
+                const requests = await res.json();
+                const existing = requests.find(r => (r.petId && (r.petId._id === petId || r.petId === petId)) || r.petId === petId);
+                if (existing) {
+                    const msg = existing.status === 'approved' ?
+                        'Your adoption request for this pet has been approved.' :
+                        existing.status === 'rejected' ? 'Your adoption request for this pet was declined.' :
+                        'You have already requested to adopt this pet. Your request is pending.';
+                    const messageDiv = document.getElementById('messageDiv');
+                    const cls = existing.status === 'approved' ? 'success' : existing.status === 'rejected' ? 'danger' : 'info';
+                    messageDiv.innerHTML = `
+                        <div class="alert alert-${cls}">
+                            ${msg} <a href="my-adoption-requests.html" class="alert-link">View status</a>.
+                        </div>`;
+                    // Disable form submit to avoid duplicate requests
+                    const submitBtn = document.querySelector('#adoptionForm button[type="submit"]');
+                    if (submitBtn) submitBtn.disabled = true;
+                }
+                // If no existing request by current user, but pet is on hold by someone else, disable form
+                if (!existing && window.currentPet && window.currentPet.adoptionStatus === 'requested') {
+                    const messageDiv = document.getElementById('messageDiv');
+                    messageDiv.innerHTML = `
+                        <div class="alert alert-warning">
+                            This pet is currently on hold due to a pending adoption request. Please check back later or explore other pets.
+                        </div>`;
+                    const submitBtn = document.querySelector('#adoptionForm button[type="submit"]');
+                    if (submitBtn) submitBtn.disabled = true;
+                }
+            } catch (e) {
+                console.warn('Could not check existing request', e);
+            }
+        }
+
+        // Load pet information
+        async function loadPetInfo(petId) {
+            try {
+                const response = await fetch(`http://localhost:5000/api/pets/${petId}`);
+                if (response.ok) {
+                    const pet = await response.json();
+                    window.currentPet = pet;
+                    document.getElementById('petId').value = pet._id;
+                    document.getElementById('petName').value = pet.name;
+                    document.getElementById('petNameDisplay').textContent = pet.name;
+                    document.getElementById('petInfo').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error loading pet info:', error);
+            }
+        }
+
+        // Handle form submission
+        document.getElementById('adoptionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                petId: document.getElementById('petId').value,
+                petName: document.getElementById('petName').value,
+                applicantName: document.getElementById('name').value,
+                applicantEmail: document.getElementById('email').value,
+                applicantPhone: document.getElementById('phone').value,
+                applicantAddress: document.getElementById('address').value,
+                experience: document.getElementById('experience').value,
+                message: document.getElementById('message').value
+            };
+
+            try {
+                const response = await fetch('http://localhost:5000/api/adoption', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+                const messageDiv = document.getElementById('messageDiv');
+
+                if (response.ok) {
+                    messageDiv.innerHTML = `<div class="alert alert-success">${data.message} Redirecting to your adoption requests...</div>`;
+                    document.getElementById('adoptionForm').reset();
+                    setTimeout(() => {
+                        window.location.href = 'my-adoption-requests.html';
+                    }, 2000);
+                } else {
+                    messageDiv.innerHTML = `<div class="alert alert-danger">Error: ${data.message}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('messageDiv').innerHTML = `<div class="alert alert-danger">Error submitting application: ${error.message}</div>`;
+            }
+        });
+
+        // Check authentication
+        function checkAuth() {
+            const user = JSON.parse(localStorage.getItem('user'));
+            const navbarItems = document.getElementById('navbarItems');
+            
+            if (user) {
+                const userDropdown = document.createElement('li');
+                userDropdown.className = 'nav-item dropdown';
+                userDropdown.innerHTML = `
+                    <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
+                        Welcome, ${user.name}
+                    </a>
+                    <ul class="dropdown-menu">
+                        ${user.role === 'admin' ? '<li><a class="dropdown-item" href="admin-panel.html">Admin Panel</a></li>' : ''}
+                        ${user.role === 'user' ? '<li><a class="dropdown-item" href="my-adoption-requests.html">My Adoption Requests</a></li>' : ''}
+                        <li><a class="dropdown-item" href="#" onclick="logout()">Logout</a></li>
+                    </ul>
+                `;
+                navbarItems.appendChild(userDropdown);
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('user');
+            window.location.href = 'index.html';
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

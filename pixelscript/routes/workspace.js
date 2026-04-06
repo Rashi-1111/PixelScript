@@ -1,0 +1,89 @@
+const express = require('express');
+const multer = require('multer');
+const Workspace = require('../models/Workspace');
+const { createDiskStorage, buildPublicFileUrl } = require('../services/storage');
+
+const router = express.Router();
+
+const workspaceUpload = multer({
+    storage: createDiskStorage('workspace'),
+    limits: { fileSize: 10 * 1024 * 1024 }
+});
+
+async function findOrCreateWorkspace(room) {
+    let workspace = await Workspace.findOne({ room });
+    if (!workspace) {
+        workspace = await Workspace.create({ room });
+    }
+
+    return workspace;
+}
+
+router.get('/:room', async (req, res) => {
+    try {
+        const workspace = await Workspace.findOne({ room: req.params.room }).lean();
+
+        res.json(workspace || {
+            room: req.params.room,
+            canvasState: '',
+            chat: [],
+            assets: []
+        });
+    } catch (error) {
+        console.error('Error fetching workspace:', error);
+        res.status(500).json({ error: 'Failed to load workspace' });
+    }
+});
+
+router.put('/:room', async (req, res) => {
+    try {
+        const workspace = await findOrCreateWorkspace(req.params.room);
+
+        if (typeof req.body.canvasState === 'string') {
+            workspace.canvasState = req.body.canvasState;
+        }
+
+        if (Array.isArray(req.body.chat)) {
+            workspace.chat = req.body.chat
+                .filter(item => item && item.message)
+                .slice(-100)
+                .map(item => ({
+                    sender: item.sender || 'Collaborator',
+                    message: String(item.message).trim(),
+                    sentAt: item.sentAt ? new Date(item.sentAt) : new Date()
+                }));
+        }
+
+        await workspace.save();
+        res.json(workspace);
+    } catch (error) {
+        console.error('Error saving workspace:', error);
+        res.status(500).json({ error: 'Failed to save workspace' });
+    }
+});
+
+router.post('/:room/assets', workspaceUpload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+
+        const workspace = await findOrCreateWorkspace(req.params.room);
+        const asset = {
+            name: req.file.originalname,
+            url: buildPublicFileUrl('workspace', req.file.filename),
+            type: req.file.mimetype,
+            uploadedBy: req.body.uploadedBy || 'Collaborator'
+        };
+
+        workspace.assets.push(asset);
+        await workspace.save();
+
+        res.status(201).json(asset);
+    } catch (error) {
+        console.error('Error uploading workspace asset:', error);
+        res.status(500).json({ error: 'Failed to upload file' });
+    }
+});
+
+module.exports = router;

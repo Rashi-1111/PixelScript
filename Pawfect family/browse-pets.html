@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browse Pets</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        .navbar {
+            background-color: #000;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .navbar-brand, .nav-link {
+            color: #fff !important;
+        }
+        .nav-link:hover {
+            color: #ddd !important;
+        }
+        .status-badge {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 2;
+            border-radius: 12px;
+            padding: 6px 10px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .status-pending { background: #fff3cd; color: #7a5d00; }
+        .status-approved { background: #d1e7dd; color: #0f5132; }
+        .status-rejected { background: #f8d7da; color: #842029; }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="index.html">Pawfect Match</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto" id="navbarItems">
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="browse-pets.html">Browse Pets</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="give-pet-for-adoption.html">Give Pet</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-5">
+        <h1 class="text-center mb-4">Browse Pets</h1>
+        <div class="row">
+            <!-- Filters Sidebar -->
+            <div class="col-md-3">
+                <h5>Filters</h5>
+                <form>
+                    <div class="mb-3">
+                        <label for="type" class="form-label">Type</label>
+                        <select id="type" class="form-select">
+                            <option value="all">All</option>
+                            <option value="dog">Dog</option>
+                            <option value="cat">Cat</option>
+                            <option value="rabbit">Rabbit</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="age" class="form-label">Age Range</label>
+                        <input type="range" class="form-range" id="age" min="0" max="20">
+                    </div>
+                    <div class="mb-3">
+                        <label for="gender" class="form-label">Gender</label>
+                        <select id="gender" class="form-select">
+                            <option value="all">All</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="location" class="form-label">Location</label>
+                        <input type="text" id="location" class="form-control" placeholder="Enter location">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+                </form>
+            </div>
+            <!-- Pets Grid -->
+            <div class="col-md-9">
+                <div class="row" id="pets-grid">
+                    <!-- Dynamic pet cards will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        // Static featured pets data
+        const featuredPets = [
+            {
+                _id: 'featured-max',
+                name: 'Max',
+                breed: 'Golden Retriever',
+                age: '6 months',
+                description: 'Friendly and energetic, loves to play fetch and great with kids!',
+                image: 'images/pet3.jpg',
+                type: 'dog',
+                gender: 'male',
+                isFeatured: true
+            },
+            {
+                _id: 'featured-bella',
+                name: 'Bella',
+                breed: 'Persian Cat',
+                age: '2 years',
+                description: 'Calm and affectionate, perfect lap cat who loves cuddles.',
+                image: 'images/pet1.jpg',
+                type: 'cat',
+                gender: 'female',
+                isFeatured: true
+            },
+            {
+                _id: 'featured-charlie',
+                name: 'Charlie',
+                breed: 'Rabbit',
+                age: '1 year',
+                description: 'Loyal companion, well-trained and loves outdoor adventures.',
+                image: 'images/pet2.jpg',
+                type: 'rabbit',
+                gender: 'male',
+                isFeatured: true
+            }
+        ];
+
+        // Fetch and display approved pets, and annotate with current user's request status
+        async function loadPets() {
+            try {
+                const user = JSON.parse(localStorage.getItem('user'));
+                
+                // Fetch dynamic pets from API
+                let dynamicPets = [];
+                try {
+                    const petsRes = await fetch('http://localhost:5000/api/pets');
+                    if (petsRes.ok) {
+                        dynamicPets = await petsRes.json();
+                    }
+                } catch (e) {
+                    console.warn('Could not load dynamic pets:', e);
+                }
+
+                // Combine featured pets with dynamic pets
+                const allPets = [...featuredPets, ...dynamicPets];
+
+                // Build a map of petId -> status for current user (if logged in)
+                let statusByPet = {};
+                if (user && user.email) {
+                    try {
+                        const reqRes = await fetch(`http://localhost:5000/api/adoption?email=${encodeURIComponent(user.email)}`);
+                        if (reqRes.ok) {
+                            const requests = await reqRes.json();
+                            statusByPet = requests.reduce((acc, r) => {
+                                if (r.petId) acc[r.petId._id || r.petId] = r.status;
+                                return acc;
+                            }, {});
+                        }
+                    } catch (e) {
+                        console.warn('Could not load user requests:', e);
+                    }
+                }
+
+                const petsGrid = document.getElementById('pets-grid');
+                petsGrid.innerHTML = '';
+
+                if (!Array.isArray(allPets) || allPets.length === 0) {
+                    petsGrid.innerHTML = '<div class="col-12"><p class="text-center">No pets available for adoption at the moment.</p></div>';
+                    return;
+                }
+
+                allPets.forEach(pet => {
+                    const status = statusByPet[pet._id];
+                    const hasRequest = Boolean(status);
+                    const globalHold = pet.adoptionStatus === 'requested';
+                    const statusClass = status === 'approved' ? 'status-approved' : status === 'rejected' ? 'status-rejected' : 'status-pending';
+                    const statusLabel = status === 'approved' ? 'Approved' : status === 'rejected' ? 'Declined' : 'Requested';
+                    
+                    // For featured pets, show contact message instead of adoption form
+                    let ctaHref, ctaText, ctaDisabled = false;
+                    if (pet.isFeatured) {
+                        ctaHref = '#contact';
+                        ctaText = 'Contact Us to Adopt';
+                        ctaDisabled = false;
+                    } else if (hasRequest) {
+                        ctaHref = 'my-adoption-requests.html';
+                        ctaText = 'View Status';
+                    } else if (globalHold) {
+                        ctaHref = null;
+                        ctaText = 'On Hold';
+                        ctaDisabled = true;
+                    } else {
+                        ctaHref = `adoption-form.html?petId=${pet._id}`;
+                        ctaText = 'Adopt Now';
+                    }
+                    
+                    // Handle image path for featured vs API pets
+                    const imgSrc = pet.isFeatured ? pet.image : `http://localhost:5000/${pet.image}`;
+                    const ageDisplay = typeof pet.age === 'number' ? `${pet.age} years` : pet.age;
+
+                    const petCard = `
+                        <div class="col-md-4 mb-4">
+                            <div class="card position-relative" style="height: 100%;">
+                                ${pet.isFeatured ? '<span class="status-badge" style="background: #ffd700; color: #000;">⭐ Featured</span>' : ''}
+                                ${hasRequest && !pet.isFeatured ? `<span class="status-badge ${statusClass}">${statusLabel}</span>` : (globalHold && !pet.isFeatured ? `<span class=\"status-badge status-pending\">On Hold</span>` : '')}
+                                <img src="${imgSrc}" class="card-img-top" alt="${pet.name}" style="height: 200px; object-fit: cover;">
+                                <div class="card-body d-flex flex-column">
+                                    <h5 class="card-title">${pet.name}</h5>
+                                    <p class="card-text flex-grow-1">
+                                        <strong>Breed:</strong> ${pet.breed}<br>
+                                        <strong>Age:</strong> ${ageDisplay}<br>
+                                        ${pet.description || ''}
+                                    </p>
+                                    <div class="d-grid gap-2">
+                                        ${ctaDisabled ? `<button class=\"btn btn-outline-secondary\" disabled>${ctaText}</button>` : `<a href=\"${ctaHref}\" class=\"btn ${hasRequest ? 'btn-outline-secondary' : 'btn-warning'}\" ${pet.isFeatured ? 'onclick="scrollToContact(event)"' : ''}>${ctaText}</a>`}
+                                        ${!pet.isFeatured ? `<a href="pet-details.html?petId=${pet._id}" class="btn btn-outline-dark btn-sm">See Details</a>` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    petsGrid.innerHTML += petCard;
+                });
+            } catch (error) {
+                console.error('Error loading pets:', error);
+                document.getElementById('pets-grid').innerHTML = '<div class="col-12"><p class="text-center text-danger">Error loading pets. Please try again later.</p></div>';
+            }
+        }
+        
+        // Load pets when page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            loadPets();
+            checkAuth();
+        });
+
+        // Check authentication and update navbar
+        function checkAuth() {
+            const user = JSON.parse(localStorage.getItem('user'));
+            const navbarItems = document.getElementById('navbarItems');
+            
+            if (user) {
+                // Add user dropdown
+                const userDropdown = document.createElement('li');
+                userDropdown.className = 'nav-item dropdown';
+                userDropdown.innerHTML = `
+                    <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
+                        Welcome, ${user.name}
+                    </a>
+                    <ul class="dropdown-menu">
+                        ${user.role === 'admin' ? '<li><a class="dropdown-item" href="admin-panel.html">Admin Panel</a></li>' : ''}
+                        ${user.role === 'user' ? '<li><a class="dropdown-item" href="my-adoption-requests.html">My Adoption Requests</a></li>' : ''}
+                        <li><a class="dropdown-item" href="#" onclick="logout()">Logout</a></li>
+                    </ul>
+                `;
+                navbarItems.appendChild(userDropdown);
+            } else {
+                // Add login/signup links
+                navbarItems.innerHTML += `
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html#login" onclick="redirectToLogin()">Login</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html#signup" onclick="redirectToSignup()">Signup</a>
+                    </li>
+                `;
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('user');
+            window.location.href = 'index.html';
+        }
+
+        function redirectToLogin() {
+            window.location.href = 'index.html';
+            setTimeout(() => {
+                const loginModal = new bootstrap.Modal(document.getElementById('loginModal'));
+                loginModal.show();
+            }, 500);
+        }
+
+        function scrollToContact(event) {
+            event.preventDefault();
+            // Redirect to homepage contact section
+            window.location.href = 'index.html#contact';
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

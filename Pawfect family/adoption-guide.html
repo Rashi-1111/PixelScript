@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Adoption Guide - Pawfect Match</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
+  <style>
+    body { background: #fafafa; font-family: 'Poppins', 'Nunito', 'Quicksand', sans-serif; }
+    .navbar { background-color: #000; }
+    .navbar-brand, .nav-link { color: #fff !important; }
+    .nav-link:hover { color: #ddd !important; }
+    .hero { background: linear-gradient(135deg, #ffeaa7, #fdcb6e, #fab1a0); padding: 60px 0; }
+    .hero h1 { font-weight: 700; }
+    .step-card { background: #fff; border-radius: 18px; padding: 24px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); height: 100%; }
+    .step-icon { width: 56px; height: 56px; display: inline-flex; align-items: center; justify-content: center; border-radius: 12px; color: #fff; margin-right: 12px; }
+    .bg-step-1 { background: linear-gradient(135deg, #74b9ff, #0984e3); }
+    .bg-step-2 { background: linear-gradient(135deg, #a29bfe, #6c5ce7); }
+    .bg-step-3 { background: linear-gradient(135deg, #55efc4, #00b894); }
+    .section { padding: 48px 0; }
+    .list-check li { margin-bottom: 10px; }
+    .list-check i { color: #00b894; margin-right: 8px; }
+    .cta-card { background: #111; color: #fff; border-radius: 18px; padding: 28px; }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark">
+    <div class="container">
+      <a class="navbar-brand" href="index.html">Pawfect Match</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto" id="navbarItems">
+          <li class="nav-item"><a class="nav-link" href="index.html">Home</a></li>
+          <li class="nav-item"><a class="nav-link" href="browse-pets.html">Browse Pets</a></li>
+          <li class="nav-item"><a class="nav-link" href="give-pet-for-adoption.html">Give Pet</a></li>
+          <li class="nav-item"><a class="nav-link" href="my-adoption-requests.html">My Requests</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <div class="row align-items-center">
+        <div class="col-lg-7 mb-4 mb-lg-0">
+          <h1 class="mb-3">How Adoption Works</h1>
+          <p class="lead mb-4">A simple, caring process to match every pet with the right family. Learn the steps, meet your match, and adopt with confidence.</p>
+          <a href="#learn" class="btn btn-warning me-2">Learn the Steps</a>
+          <a href="browse-pets.html" class="btn btn-outline-dark">Explore Pets</a>
+        </div>
+        <div class="col-lg-5">
+          <div class="cta-card">
+            <h5 class="mb-3"><i class="fas fa-lightbulb me-2"></i>Quick Tips</h5>
+            <ul class="mb-0">
+              <li>Be honest about your lifestyle and space.</li>
+              <li>Read each pet's description carefully.</li>
+              <li>Ask questions—our team is here to help.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Learn -->
+  <section id="learn" class="section">
+    <div class="container">
+      <div class="row g-4">
+        <div class="col-12">
+          <h2 class="mb-3"><span class="step-icon bg-step-1"><i class="fas fa-compass"></i></span>Step 1: Learn</h2>
+          <p>Understand our adoption philosophy and what makes a great match. We prioritize the wellbeing of pets and the readiness of adopters.</p>
+        </div>
+        <div class="col-md-6">
+          <div class="step-card">
+            <h5>What we look for</h5>
+            <ul class="list-unstyled list-check mb-0">
+              <li><i class="fas fa-check"></i>Stable living environment</li>
+              <li><i class="fas fa-check"></i>Time and commitment for care</li>
+              <li><i class="fas fa-check"></i>Family alignment on adopting</li>
+              <li><i class="fas fa-check"></i>Ability to cover basic pet needs</li>
+            </ul>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="step-card">
+            <h5>Documents you may need</h5>
+            <ul class="list-unstyled list-check mb-0">
+              <li><i class="fas fa-check"></i>Valid ID</li>
+              <li><i class="fas fa-check"></i>Proof of address</li>
+              <li><i class="fas fa-check"></i>Landlord approval (if renting)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Meet -->
+  <section id="meet" class="section" style="background:#fff;">
+    <div class="container">
+      <h2 class="mb-3"><span class="step-icon bg-step-2"><i class="fas fa-handshake"></i></span>Step 2: Meet</h2>
+      <p class="mb-4">Found a pet you like? Submit an adoption application from that pet's page. Our team will review it and arrange a meet-and-greet if it's a good match.</p>
+      <div class="row g-4">
+        <div class="col-md-6">
+          <div class="step-card h-100">
+            <h5>How meeting works</h5>
+            <ul class="list-unstyled list-check mb-0">
+              <li><i class="fas fa-check"></i>Apply via "Adopt Now" on the pet card</li>
+              <li><i class="fas fa-check"></i>We review your application promptly</li>
+              <li><i class="fas fa-check"></i>If shortlisted, we'll contact you to schedule</li>
+            </ul>
+            <a href="browse-pets.html" class="btn btn-warning mt-3">Browse pets</a>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="step-card h-100">
+            <h5>Track your request</h5>
+            <p>After applying, you can check your application status anytime.</p>
+            <a href="my-adoption-requests.html" class="btn btn-outline-dark">My adoption requests</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Adopt -->
+  <section id="adopt" class="section">
+    <div class="container">
+      <h2 class="mb-3"><span class="step-icon bg-step-3"><i class="fas fa-home"></i></span>Step 3: Adopt</h2>
+      <p class="mb-4">Once approved, we'll guide you through final paperwork, a quick care briefing, and the happy handover.</p>
+      <div class="row g-4">
+        <div class="col-md-6">
+          <div class="step-card h-100">
+            <h5>Before bringing your pet home</h5>
+            <ul class="list-unstyled list-check mb-0">
+              <li><i class="fas fa-check"></i>Prepare essentials (food, bowls, bed, toys)</li>
+              <li><i class="fas fa-check"></i>Set up a calm, safe space</li>
+              <li><i class="fas fa-check"></i>Plan the first vet check-up</li>
+            </ul>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="step-card h-100">
+            <h5>Have a pet to rehome?</h5>
+            <p>We know it's a tough decision. We'll make it caring and safe.</p>
+            <a href="give-pet-for-adoption.html" class="btn btn-warning">Give a pet for adoption</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="background:#111; color:#fff;">
+    <div class="container text-center">
+      <h3 class="mb-3">Ready to find your match?</h3>
+      <p class="mb-4">Explore loving pets waiting for a forever home.</p>
+      <a href="browse-pets.html" class="btn btn-light">Start browsing</a>
+    </div>
+  </section>
+
+  <script>
+    // Optional: enhance navbar with user dropdown if logged in
+    (function(){
+      const user = JSON.parse(localStorage.getItem('user'));
+      const navbarItems = document.getElementById('navbarItems');
+      if (!navbarItems) return;
+      if (user) {
+        const li = document.createElement('li');
+        li.className = 'nav-item dropdown';
+        li.innerHTML = `
+          <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
+            Welcome, ${user.name}
+          </a>
+          <ul class="dropdown-menu">
+            ${user.role === 'admin' ? '<li><a class="dropdown-item" href="admin-panel.html">Admin Panel</a></li>' : ''}
+            ${user.role === 'user' ? '<li><a class="dropdown-item" href="my-adoption-requests.html">My Adoption Requests</a></li>' : ''}
+            <li><a class="dropdown-item" href="#" onclick="localStorage.removeItem('user'); window.location.href='index.html'">Logout</a></li>
+          </ul>
+        `;
+        navbarItems.appendChild(li);
+      }
+    })();
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Adoption Requests - Pawfect Match</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 50%, #fab1a0 100%);
+            min-height: 100vh;
+        }
+        .navbar {
+            background-color: #000;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .navbar-brand, .nav-link {
+            color: #fff !important;
+        }
+        .nav-link:hover {
+            color: #ddd !important;
+        }
+        .container-main {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 24px;
+            padding: 40px;
+            margin: 30px auto;
+            max-width: 1200px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        .page-title {
+            color: #333;
+            font-weight: 700;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #667eea;
+        }
+        .request-card {
+            background: white;
+            border-radius: 18px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .request-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        }
+        .status-badge {
+            font-size: 1.1rem;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        .status-pending {
+            background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%);
+            color: #333;
+        }
+        .status-approved {
+            background: linear-gradient(135deg, #55efc4 0%, #00b894 100%);
+            color: white;
+        }
+        .status-rejected {
+            background: linear-gradient(135deg, #ff7675 0%, #d63031 100%);
+            color: white;
+        }
+        .pet-image {
+            width: 120px;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+        }
+        .empty-state i {
+            font-size: 4rem;
+            color: #ddd;
+            margin-bottom: 20px;
+        }
+        .info-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 5px;
+        }
+        .info-value {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="index.html">Pawfect Match</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto" id="navbarItems">
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="browse-pets.html">Browse Pets</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="give-pet-for-adoption.html">Give Pet</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="my-adoption-requests.html">My Requests</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Access Denied Message -->
+    <div id="accessDenied" style="display: none;">
+        <div class="container-main text-center">
+            <i class="fas fa-lock fa-3x mb-3" style="color: #d63031;"></i>
+            <h3>Please Log In</h3>
+            <p>You need to be logged in to view your adoption requests.</p>
+            <a href="index.html" class="btn btn-warning">Go to Home & Login</a>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent" style="display: none;">
+        <div class="container-main">
+            <h1 class="page-title">
+                <i class="fas fa-heart me-2"></i>My Adoption Requests
+            </h1>
+            
+            <div id="loadingMessage" class="text-center py-5">
+                <div class="spinner-border text-warning" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3">Loading your requests...</p>
+            </div>
+
+            <div id="requestsContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+
+        // Check authentication on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            currentUser = JSON.parse(localStorage.getItem('user'));
+            
+            if (!currentUser) {
+                document.getElementById('accessDenied').style.display = 'block';
+                document.getElementById('mainContent').style.display = 'none';
+            } else {
+                document.getElementById('accessDenied').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                updateNavbar();
+                loadMyRequests();
+            }
+        });
+
+        // Update navbar with user info
+        function updateNavbar() {
+            const navbarItems = document.getElementById('navbarItems');
+            const userDropdown = document.createElement('li');
+            userDropdown.className = 'nav-item dropdown';
+            userDropdown.innerHTML = `
+                <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
+                    Welcome, ${currentUser.name}
+                </a>
+                <ul class="dropdown-menu">
+                    ${currentUser.role === 'admin' ? '<li><a class="dropdown-item" href="admin-panel.html">Admin Panel</a></li>' : ''}
+                    <li><a class="dropdown-item" href="my-adoption-requests.html">My Requests</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="logout()">Logout</a></li>
+                </ul>
+            `;
+            navbarItems.appendChild(userDropdown);
+        }
+
+        function logout() {
+            localStorage.removeItem('user');
+            window.location.href = 'index.html';
+        }
+
+        // Load user's adoption requests
+        async function loadMyRequests() {
+            try {
+                const response = await fetch(`http://localhost:5000/api/adoption?email=${encodeURIComponent(currentUser.email)}`);
+                const requests = await response.json();
+                
+                document.getElementById('loadingMessage').style.display = 'none';
+                displayRequests(requests);
+            } catch (error) {
+                console.error('Error loading requests:', error);
+                document.getElementById('loadingMessage').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Error loading your requests. Please try again later.
+                    </div>
+                `;
+            }
+        }
+
+        function displayRequests(requests) {
+            const container = document.getElementById('requestsContainer');
+            
+            if (requests.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-inbox"></i>
+                        <h3>No Adoption Requests Yet</h3>
+                        <p class="text-muted">You haven't submitted any adoption requests.</p>
+                        <a href="browse-pets.html" class="btn btn-warning mt-3">
+                            <i class="fas fa-search me-2"></i>Browse Pets
+                        </a>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = '';
+            requests.forEach(request => {
+                const statusClass = 
+                    request.status === 'approved' ? 'status-approved' : 
+                    request.status === 'rejected' ? 'status-rejected' : 
+                    'status-pending';
+                
+                const statusIcon = 
+                    request.status === 'approved' ? 'fa-check-circle' : 
+                    request.status === 'rejected' ? 'fa-times-circle' : 
+                    'fa-clock';
+
+                const statusMessage = 
+                    request.status === 'approved' ? 
+                        '<div class="alert alert-success mt-3"><i class="fas fa-check-circle me-2"></i><strong>Congratulations!</strong> Your adoption request has been approved. Our team will contact you soon!</div>' : 
+                    request.status === 'rejected' ? 
+                        '<div class="alert alert-danger mt-3"><i class="fas fa-times-circle me-2"></i>Unfortunately, your request was not approved. Please feel free to apply for other pets.</div>' : 
+                        '<div class="alert alert-info mt-3"><i class="fas fa-clock me-2"></i>Your request is under review. We\'ll notify you once a decision is made.</div>';
+
+                const petImage = request.petId && request.petId.image ? 
+                    `http://localhost:5000/${request.petId.image}` : 
+                    'images/placeholder-pet.jpg';
+
+                const card = document.createElement('div');
+                card.className = 'request-card';
+                card.innerHTML = `
+                    <div class="row">
+                        <div class="col-md-3 text-center mb-3 mb-md-0">
+                            ${request.petId ? `<img src="${petImage}" alt="${request.petName}" class="pet-image">` : ''}
+                            <h5 class="mt-3 mb-0">${request.petName}</h5>
+                            ${request.petId ? `<small class="text-muted">${request.petId.breed} • ${request.petId.age} years</small>` : ''}
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="mb-3"><i class="fas fa-calendar-alt me-2"></i>Submitted: ${new Date(request.submittedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</h6>
+                            
+                            <div class="info-section">
+                                <div class="info-label"><i class="fas fa-user me-2"></i>Your Name</div>
+                                <div class="info-value">${request.applicantName}</div>
+                            </div>
+                            
+                            <div class="info-section mt-2">
+                                <div class="info-label"><i class="fas fa-envelope me-2"></i>Email</div>
+                                <div class="info-value">${request.applicantEmail}</div>
+                            </div>
+                            
+                            <div class="info-section mt-2">
+                                <div class="info-label"><i class="fas fa-phone me-2"></i>Phone</div>
+                                <div class="info-value">${request.applicantPhone}</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <div class="mb-3">
+                                <div class="text-muted small mb-2">Status</div>
+                                <span class="status-badge ${statusClass}">
+                                    <i class="fas ${statusIcon} me-2"></i>${request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                                </span>
+                            </div>
+                            ${statusMessage}
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

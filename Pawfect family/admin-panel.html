@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Pawfect Family</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 50%, #fab1a0 100%);
+            min-height: 100vh;
+        }
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .navbar-brand {
+            font-weight: 600;
+            font-size: 1.5rem;
+        }
+        .container-main {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 24px;
+            padding: 40px;
+            margin: 30px auto;
+            max-width: 1400px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        .approved { background-color: #d4edda !important; }
+        .pending { background-color: #fff3cd !important; }
+        .rejected { background-color: #f8d7da !important; }
+        .pet-image { width: 80px; height: 80px; object-fit: cover; border-radius: 12px; }
+        .btn-filter {
+            border-radius: 20px;
+            padding: 8px 20px;
+            margin: 5px;
+            font-weight: 500;
+        }
+        .btn-pastel-primary {
+            background: linear-gradient(135deg, #a29bfe 0%, #6c5ce7 100%);
+            color: white;
+            border: none;
+        }
+        .btn-pastel-warning {
+            background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%);
+            color: #333;
+            border: none;
+        }
+        .btn-pastel-success {
+            background: linear-gradient(135deg, #55efc4 0%, #00b894 100%);
+            color: white;
+            border: none;
+        }
+        .btn-pastel-danger {
+            background: linear-gradient(135deg, #ff7675 0%, #d63031 100%);
+            color: white;
+            border: none;
+        }
+        .btn-pastel-info {
+            background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
+            color: white;
+            border: none;
+        }
+        .tab-buttons {
+            margin-bottom: 30px;
+        }
+        .tab-btn {
+            background: white;
+            border: 2px solid #ddd;
+            padding: 12px 30px;
+            margin: 5px;
+            border-radius: 25px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .tab-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+        }
+        .section-title {
+            color: #333;
+            font-weight: 700;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #667eea;
+        }
+        .table {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .table thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark">
+        <div class="container-fluid px-4">
+            <span class="navbar-brand mb-0 h1"><i class="fas fa-paw me-2"></i>Admin Panel</span>
+            <div class="d-flex align-items-center">
+                <span class="text-white me-3" id="adminName"></span>
+                <button class="btn btn-outline-light btn-sm" onclick="logout()"><i class="fas fa-sign-out-alt me-1"></i>Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div id="accessDenied" style="display: none;">
+        <div class="container-main text-center">
+            <i class="fas fa-lock fa-3x mb-3" style="color: #d63031;"></i>
+            <h3>Access Denied</h3>
+            <p>You must be logged in as an admin to access this page.</p>
+            <a href="index.html" class="btn btn-pastel-primary">Go to Home</a>
+        </div>
+    </div>
+
+    <div id="adminContent" style="display: none;">
+        <div class="container-main">
+            <div class="tab-buttons text-center">
+                <button class="tab-btn active" onclick="showSection('pets')">
+                    <i class="fas fa-dog me-2"></i>Pet Submissions
+                </button>
+                <button class="tab-btn" onclick="showSection('adoptions')">
+                    <i class="fas fa-heart me-2"></i>Adoption Requests
+                </button>
+            </div>
+
+            <div id="messageDiv" class="alert" style="display: none;"></div>
+
+            <!-- Pet Management Section -->
+            <div id="petsSection">
+                <h2 class="section-title"><i class="fas fa-paw me-2"></i>Manage Pet Submissions</h2>
+                
+                <div class="mb-4">
+                    <button class="btn btn-filter btn-pastel-primary" onclick="filterPets('all')">All Pets</button>
+                    <button class="btn btn-filter btn-pastel-warning" onclick="filterPets('pending')">Pending Approval</button>
+                    <button class="btn btn-filter btn-pastel-success" onclick="filterPets('approved')">Approved</button>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Image</th>
+                                <th>Name</th>
+                                <th>Breed</th>
+                                <th>Age</th>
+                                <th>Description</th>
+                                <th>Submitted</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="petsTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Adoption Requests Section -->
+            <div id="adoptionsSection" style="display: none;">
+                <h2 class="section-title"><i class="fas fa-heart me-2"></i>Adoption Requests</h2>
+                
+                <div class="mb-4">
+                    <button class="btn btn-filter btn-pastel-primary" onclick="filterAdoptions('all')">All Requests</button>
+                    <button class="btn btn-filter btn-pastel-warning" onclick="filterAdoptions('pending')">Pending</button>
+                    <button class="btn btn-filter btn-pastel-success" onclick="filterAdoptions('approved')">Approved</button>
+                    <button class="btn btn-filter btn-pastel-danger" onclick="filterAdoptions('rejected')">Rejected</button>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Pet Name</th>
+                                <th>Applicant</th>
+                                <th>Email</th>
+                                <th>Phone</th>
+                                <th>Address</th>
+                                <th>Submitted</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adoptionsTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <script>
+        let allPets = [];
+        let allAdoptions = [];
+        let currentPetFilter = 'all';
+        let currentAdoptionFilter = 'all';
+
+        // Check authentication on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            const user = JSON.parse(localStorage.getItem('user'));
+            
+            if (!user || user.role !== 'admin') {
+                document.getElementById('accessDenied').style.display = 'block';
+                document.getElementById('adminContent').style.display = 'none';
+            } else {
+                document.getElementById('accessDenied').style.display = 'none';
+                document.getElementById('adminContent').style.display = 'block';
+                document.getElementById('adminName').textContent = `${user.name}`;
+                loadAllPets();
+                loadAllAdoptions();
+            }
+        });
+
+        function logout() {
+            localStorage.removeItem('user');
+            window.location.href = 'index.html';
+        }
+
+        // Show section
+        function showSection(section) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.closest('.tab-btn').classList.add('active');
+            
+            if (section === 'pets') {
+                document.getElementById('petsSection').style.display = 'block';
+                document.getElementById('adoptionsSection').style.display = 'none';
+            } else {
+                document.getElementById('petsSection').style.display = 'none';
+                document.getElementById('adoptionsSection').style.display = 'block';
+            }
+        }
+
+        // === PET MANAGEMENT ===
+        async function loadAllPets() {
+            try {
+                const response = await fetch('http://localhost:5000/api/pets/all');
+                allPets = await response.json();
+                displayPets();
+            } catch (error) {
+                console.error('Error loading pets:', error);
+                showMessage('Error loading pets. Please try again.', 'danger');
+            }
+        }
+
+        function displayPets() {
+            const tbody = document.getElementById('petsTableBody');
+            tbody.innerHTML = '';
+
+            let filteredPets = allPets;
+            if (currentPetFilter === 'pending') {
+                filteredPets = allPets.filter(pet => !pet.approved);
+            } else if (currentPetFilter === 'approved') {
+                filteredPets = allPets.filter(pet => pet.approved);
+            }
+
+            if (filteredPets.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center">No pets found.</td></tr>';
+                return;
+            }
+
+            filteredPets.forEach(pet => {
+                const row = document.createElement('tr');
+                row.className = pet.approved ? 'approved' : 'pending';
+                row.innerHTML = `
+                    <td><img src="http://localhost:5000/${pet.image}" alt="${pet.name}" class="pet-image"></td>
+                    <td>${pet.name}</td>
+                    <td>${pet.breed}</td>
+                    <td>${pet.age}</td>
+                    <td>${pet.description ? pet.description.substring(0, 50) + '...' : 'N/A'}</td>
+                    <td>${new Date(pet.submittedAt).toLocaleDateString()}</td>
+                    <td>
+                        <span class="badge ${pet.approved ? 'bg-success' : 'bg-warning text-dark'}">
+                            ${pet.approved ? 'Approved' : 'Pending'}
+                        </span>
+                    </td>
+                    <td>
+                        ${!pet.approved ? 
+                            `<button class="btn btn-sm btn-pastel-success me-1" onclick="approvePet('${pet._id}')"><i class="fas fa-check me-1"></i>Approve</button>` : 
+                            `<button class="btn btn-sm btn-pastel-warning me-1" onclick="rejectPet('${pet._id}')"><i class="fas fa-times me-1"></i>Revoke</button>`
+                        }
+                        <button class="btn btn-sm btn-pastel-danger" onclick="deletePet('${pet._id}')"><i class="fas fa-trash"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function filterPets(filter) {
+            currentPetFilter = filter;
+            displayPets();
+        }
+
+        async function approvePet(petId) {
+            try {
+                const response = await fetch(`http://localhost:5000/api/pets/${petId}/approve`, {
+                    method: 'PATCH'
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('Pet approved successfully!', 'success');
+                    await loadAllPets();
+                } else {
+                    showMessage('Error approving pet: ' + data.message, 'danger');
+                }
+            } catch (error) {
+                showMessage('Error approving pet: ' + error.message, 'danger');
+            }
+        }
+
+        async function rejectPet(petId) {
+            try {
+                const response = await fetch(`http://localhost:5000/api/pets/${petId}/reject`, {
+                    method: 'PATCH'
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('Pet approval revoked!', 'warning');
+                    await loadAllPets();
+                } else {
+                    showMessage('Error revoking approval: ' + data.message, 'danger');
+                }
+            } catch (error) {
+                showMessage('Error revoking approval: ' + error.message, 'danger');
+            }
+        }
+
+        async function deletePet(petId) {
+            if (!confirm('Are you sure you want to delete this pet?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`http://localhost:5000/api/pets/${petId}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('Pet deleted successfully!', 'success');
+                    await loadAllPets();
+                } else {
+                    showMessage('Error deleting pet: ' + data.message, 'danger');
+                }
+            } catch (error) {
+                showMessage('Error deleting pet: ' + error.message, 'danger');
+            }
+        }
+
+        // === ADOPTION REQUEST MANAGEMENT ===
+        async function loadAllAdoptions() {
+            try {
+                const response = await fetch('http://localhost:5000/api/adoption');
+                allAdoptions = await response.json();
+                displayAdoptions();
+            } catch (error) {
+                console.error('Error loading adoptions:', error);
+                showMessage('Error loading adoption requests. Please try again.', 'danger');
+            }
+        }
+
+        function displayAdoptions() {
+            const tbody = document.getElementById('adoptionsTableBody');
+            tbody.innerHTML = '';
+
+            let filteredAdoptions = allAdoptions;
+            if (currentAdoptionFilter !== 'all') {
+                filteredAdoptions = allAdoptions.filter(req => req.status === currentAdoptionFilter);
+            }
+
+            if (filteredAdoptions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center">No adoption requests found.</td></tr>';
+                return;
+            }
+
+            filteredAdoptions.forEach(req => {
+                const row = document.createElement('tr');
+                row.className = req.status === 'approved' ? 'approved' : req.status === 'rejected' ? 'rejected' : 'pending';
+                row.innerHTML = `
+                    <td><strong>${req.petName}</strong></td>
+                    <td>${req.applicantName}</td>
+                    <td>${req.applicantEmail}</td>
+                    <td>${req.applicantPhone}</td>
+                    <td>${req.applicantAddress.substring(0, 30)}...</td>
+                    <td>${new Date(req.submittedAt).toLocaleDateString()}</td>
+                    <td>
+                        <span class="badge ${req.status === 'approved' ? 'bg-success' : req.status === 'rejected' ? 'bg-danger' : 'bg-warning text-dark'}">
+                            ${req.status.charAt(0).toUpperCase() + req.status.slice(1)}
+                        </span>
+                    </td>
+                    <td>
+                        ${req.status === 'pending' ? `
+                            <button class="btn btn-sm btn-pastel-success me-1" onclick="approveAdoption('${req._id}')">
+                                <i class="fas fa-check me-1"></i>Approve
+                            </button>
+                            <button class="btn btn-sm btn-pastel-danger" onclick="rejectAdoption('${req._id}')">
+                                <i class="fas fa-times me-1"></i>Reject
+                            </button>
+                        ` : `
+                            <button class="btn btn-sm btn-pastel-info" onclick="viewDetails('${req._id}')">
+                                <i class="fas fa-eye me-1"></i>Details
+                            </button>
+                        `}
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function filterAdoptions(filter) {
+            currentAdoptionFilter = filter;
+            displayAdoptions();
+        }
+
+        async function approveAdoption(adoptionId) {
+            try {
+                const response = await fetch(`http://localhost:5000/api/adoption/${adoptionId}/approve`, {
+                    method: 'PATCH'
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('Adoption request approved!', 'success');
+                    await loadAllAdoptions();
+                } else {
+                    showMessage('Error approving adoption: ' + data.message, 'danger');
+                }
+            } catch (error) {
+                showMessage('Error approving adoption: ' + error.message, 'danger');
+            }
+        }
+
+        async function rejectAdoption(adoptionId) {
+            if (!confirm('Are you sure you want to reject this adoption request?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`http://localhost:5000/api/adoption/${adoptionId}/reject`, {
+                    method: 'PATCH'
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('Adoption request rejected', 'warning');
+                    await loadAllAdoptions();
+                } else {
+                    showMessage('Error rejecting adoption: ' + data.message, 'danger');
+                }
+            } catch (error) {
+                showMessage('Error rejecting adoption: ' + error.message, 'danger');
+            }
+        }
+
+        function viewDetails(adoptionId) {
+            const adoption = allAdoptions.find(a => a._id === adoptionId);
+            if (adoption) {
+                alert(`Pet: ${adoption.petName}\nApplicant: ${adoption.applicantName}\nEmail: ${adoption.applicantEmail}\nPhone: ${adoption.applicantPhone}\nAddress: ${adoption.applicantAddress}\nExperience: ${adoption.experience || 'N/A'}\nMessage: ${adoption.message || 'N/A'}\nStatus: ${adoption.status}`);
+            }
+        }
+
+        function showMessage(message, type) {
+            const messageDiv = document.getElementById('messageDiv');
+            messageDiv.className = `alert alert-${type}`;
+            messageDiv.textContent = message;
+            messageDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 3000);
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

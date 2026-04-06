@@ -1,0 +1,663 @@
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;800&display=swap');
+
+/* Root Variables */
+:root {
+    --main-color: hwb(348 18% 18%);
+    --black: #f39898;
+    --bg: #e9b7b0;
+    --border: 0.1rem solid rgb(254, 254, 254);
+}
+
+/* General Reset */
+* {
+    font-family: "Open Sans", serif;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    outline: none;
+    border: none;
+    text-decoration: none;
+    text-transform: capitalize;
+    transition: 0.2s linear;
+}
+
+/* HTML Styles */
+html {
+    font-size: 62.5%;
+    overflow-x: hidden;
+    scroll-padding-top: 9rem;
+    scroll-behavior: smooth;
+}
+
+/* Scrollbar Customization */
+html::-webkit-scrollbar {
+    width: 0.8rem;
+}
+html::-webkit-scrollbar-track {
+    background: transparent;
+}
+html::-webkit-scrollbar-thumb {
+    background: #fff;
+    border-radius: 5rem;
+}
+
+/* Body Style */
+body {
+    background: var(--bg);
+}
+section {
+    padding: 2rem 7%;
+}
+.heading {
+    text-align: center;
+    color: #fff;
+    text-transform: uppercase;
+    padding-bottom: 3.5rem;
+}
+.heading span {
+    color: var(--main-color);
+    text-transform: uppercase;
+}
+
+/* Button Styles */
+.btn {
+    margin-top: 1rem;
+    display: inline-block;
+    padding: 0.9rem 3rem;
+    font-size: 1.7rem;
+    color: #fff;
+    background: var(--main-color);
+    cursor: pointer;
+}
+.btn:hover {
+    letter-spacing: 0.2rem;
+}
+
+/* Header Styles */
+.header {
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.5rem 7%;
+    border-bottom: var(--border);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+}
+
+/* Logo */
+.header .logo img {
+    height: 6rem;
+}
+
+/* Navbar */
+.header .navbar a {
+    margin: 0 1rem;
+    font-size: 1.6rem;
+    color: #fff;
+}
+.header .navbar a:hover {
+    color: var(--main-color);
+    border-bottom: 0.1rem solid var(--main-color);
+    padding-bottom: 0.5rem;
+}
+
+/* Icons */
+.header .icons div {
+    color: #fff;
+    cursor: pointer;
+    font-size: 2.5rem;
+    margin-left: 2rem;
+}
+.header .icons div:hover {
+    color: var(--main-color);
+}
+#menu-btn {
+    display: none;
+}
+
+/* Search Form */
+.header .search-form {
+    position: absolute;
+    top: 115%;
+    right: 7%;
+    background: #fff;
+    width: 50rem;
+    height: 5rem;
+    display: flex;
+    align-items: center;
+    transform: scaleY(0);
+    transform-origin: top;
+}
+.header .search-form.active {
+    transform: scaleY(1);
+}
+.header .search-form input {
+    height: 100%;
+    width: 100%;
+    font-size: 1.6rem;
+    color: var(--black);
+    padding: 1rem;
+    text-transform: none;
+}
+.header .search-form label {
+    cursor: pointer;
+    font-size: 2.2rem;
+    margin-right: 1.5rem;
+    color: var(--black);
+}
+.header .search-form label:hover {
+    color: var(--main-color);
+}
+
+/* Cart Items Container */
+.header .cart-items-container {
+    position: absolute;
+    top: 100%;
+    right: -100%;
+    height: calc(100vh - 9.5rem);
+    width: 35rem;
+    background: #fff;
+    padding: 0 1.5rem;
+    transition: 0.3s ease;
+}
+.header .cart-items-container.active {
+    right: 0;
+}
+.header .cart-items-container .cart-item {
+    position: relative;
+    margin: 2rem 0;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+.header .cart-items-container .cart-item .fa-times {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    font-size: 2rem;
+    cursor: pointer;
+    color: var(--black);
+}
+.header .cart-items-container .cart-item .fa-times:hover {
+    color: var(--main-color);
+}
+.header .cart-items-container .cart-item img {
+    height: 7rem;
+}
+.header .cart-items-container .cart-item .content h3 {
+    font-size: 2rem;
+    color: var(--black);
+    padding-bottom: 0.5rem;
+}
+.header .cart-items-container .cart-item .content .price {
+    font-size: 2rem;
+    color: var(--main-color);
+}
+.header .cart-items-container .btn {
+    width: 100%;
+    text-align: center;
+}
+
+/* Responsive Styles */
+@media (max-width: 991px) {
+    html {
+        font-size: 55%;
+    }
+    .header {
+        padding: 1.5rem 2rem;
+    }
+    section {
+        padding: 2rem;
+    }
+}
+@media (max-width: 768px) {
+    #menu-btn {
+        display: inline-block;
+    }
+    .header .navbar {
+        position: absolute;
+        top: 100%;
+        right: -100%;
+        background: #fff;
+        width: 30rem;
+        height: calc(100vh - 9.5rem);
+        transition: 0.3s ease;
+    }
+    .header .navbar.active {
+        right: 0;
+    }
+    
+    .header .navbar a {
+        color: var(--black);
+        display: block;
+        margin: 1.5rem;
+        padding: 0.5rem;
+        font-size: 2rem;
+    }
+    .header .search-form {
+        width: 90%;
+        right: 2rem;
+    }
+    
+    .home {
+        background-position: left;
+        justify-content: center;
+        text-align: center;
+    }
+    .home .content h3 {
+        font-size: 4.5rem; /* Corrected from -4.5rem to 4.5rem */
+    }
+    .home .content p {
+        font-size: 1.8rem; /* Corrected from -4.5rem to 1.8rem */
+    }
+}
+
+@media (max-width: 450px) {
+    html {
+        font-size: 50%;
+    }
+}
+
+/* Home Section Customization */
+.home {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start; /* Align content to the left */
+    padding-left: 50px; /* Adjust left padding as needed */
+    background: url('../images/home-img.png') no-repeat;
+    background-size: cover;
+    background-position: center;
+}
+
+.home .content {
+    max-width: 600px; /* Limit the content width */
+    color: white; /* Set text color to white */
+}
+
+.home .content h3 {
+    font-size: 5rem;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+}
+
+.home .content p {
+    font-size: 2.5rem; /* Set font size for the paragraph */
+    font-weight: lighter; /* Fixed the missing semicolon */
+    margin-bottom: 10px;
+    color:#f7f6f6
+}
+
+.home .btn {
+    font-size: 3.5rem;
+    background-color: var(--main-color);
+    color: white;
+    padding: 0.9rem 3rem;
+    cursor: pointer;
+}
+
+.home .btn:hover {
+    letter-spacing: 0.2rem;
+}
+
+.about {
+    display: flex; /* Enables flex layout */
+    align-items: flex-start; /* Align items to the top */
+    justify-content: flex-start; /* Align content to the left */
+    gap: 1rem; /* Adds space between image and text */
+    padding: 1rem; /* Adds spacing inside the section */
+    flex-wrap: wrap;
+    font-size: 4.5rem; /* Ensures responsiveness on smaller screens */
+}
+
+.about .image {
+    flex: 1 1 90%; /* Image takes up 90% of the row */
+    display: flex; /* Ensures the image can be centered */
+    justify-content: left; /* Align image to the right */
+}
+
+.about .image img {
+    width: 70%; /* Scales image within its container */
+    max-width: 700%; /* Limit maximum image size */
+    border-radius: 1px; /* Add rounded corners */
+}
+
+.about .content {
+    flex: 1 1 190%; /* Content takes up 60% of the row */
+    max-width: 900px; /* Optional: Restrict max content width */
+    display: flex;
+    flex-direction: column;
+    justify-content: center; /* Center content vertically */
+    text-align: left; /* Align text to the left */
+}
+
+.about .content h3 {
+    font-size: 7rem;
+    color: #fff;
+    margin-bottom: 1rem;
+}
+
+.about .content p {
+    font-size: 2rem;
+    color: #1e1b1c;
+    line-height: 1.8;
+    margin-bottom: 3rem;
+}
+
+.bouquets .heading {
+    font-size: 4.5rem; /* Adjust size as needed */
+     /* Optional: change color */
+}
+/* Bouquets Section Customization */
+.bouquets .box-container {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr); /* 3 items in each row */
+    gap: 1rem;
+     /* Space between items */
+}
+
+/* Ensure two columns are visible on smaller screens */
+@media (max-width: 768px) {
+    .bouquets .box-container {
+        grid-template-columns: repeat(2, 1fr); /* 2 items in each row for smaller screens */
+    }
+}
+
+.bouquets .box-container .box {
+    padding: 5rem;
+    text-align: center;
+    border: var(--border);
+    transition: all 0.3s ease;
+}
+
+.bouquets .box-container .box img {
+    height: 50rem;
+    width: auto;
+    object-fit: cover;
+}
+
+.bouquets .box-container .box h3 {
+    color: #fff;
+    font-size: 3rem;
+    padding: 1rem 0;
+}
+
+.bouquets .box-container .box .price {
+    color: #fff;
+    font-size: 2rem;
+    padding: 0.5rem 0;
+}
+
+.bouquets .box-container .box .price span {
+    color: #fff;
+    font-size: 2rem;
+    text-decoration: line-through;
+    font-weight: lighter;
+}
+
+.bouquets .box-container .box .btn {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 0.5rem 1rem;
+    background-color: #fd8ea0;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: 0.3s ease;
+}
+
+.bouquets .box-container .box:hover {
+    background: #ff8f8f;
+}
+
+.bouquets .box-container .box.btn:hover > * {
+    color: var(--black);
+}
+.products .heading {
+    font-size: 4.5rem;
+}
+.products .box-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(30rem, 1fr));
+    gap: 1.5rem;
+}
+
+.products .box-container .box {
+    text-align: center;
+    border: var(--border);
+    padding: 2rem;
+}
+
+.products .box-container .box .icons a {
+    height: 5rem;
+    width: 5rem;
+    line-height: 5rem;
+    font-size: 2rem;
+    border: var(--border);
+    color: #fff;
+    margin: 0.3rem;
+}
+
+.products .box-container .box .icons a:hover {
+    background: var(--main-color);
+}
+
+.products .box-container .box .image {
+    padding: 2.5rem 0;
+}
+
+.products .box-container .box .image img {
+    height: 25rem;
+}
+
+.products .box-container .box .content h3 {
+    color: #fff;
+    font-size: 2.5rem;
+}
+
+.products .box-container .box .content .stars {
+    padding: 1.5rem;
+}
+
+.products .box-container .box .content .stars i {
+    font-size: 1.7rem;
+    color: var(--main-color);
+}
+
+.products .box-container .box .content .price {
+    color: #fff;
+    font-size: 2.5rem;
+}
+
+.products .box-container .box .content .price span {
+    text-decoration: line-through;
+    font-weight: lighter;
+    font-size: 1.5rem;
+}
+.review .heading {
+    font-size: 4.5rem;
+}
+.review .box-container{
+    display:grid;
+    grid-template-columns: repeat(auto-fit,minmax(20rem, 1fr));
+    gap:1.5rem;
+}
+.review .box-container .box{
+    border:var(--border);
+    text-align: center;
+    padding:3rem 2rem;
+}
+.review .box-container .box .quote {
+    position: absolute; /* Position the quote image */
+    top: -1.5rem; /* Adjust as needed */
+    left: 50%;
+    transform: translateX(-50%);
+    height: 4rem; /* Adjust size as needed */
+    width: auto;
+}
+.review .box-container .box p{
+    font-size: 1.6rem;
+    line-height: 1.8;
+    colors:#ccc;
+    padding:2rem 0;
+
+
+
+}
+.review .box-container .box .user{
+    height: 7rem;
+    width: 7rem;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.review .box-container .box h3{
+    font-size:1.5rem;
+    color:#fff;
+}
+
+.contact .row {
+    display: flex;
+    align-items: center;
+    background: var(--black);
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+.contact .heading {
+    font-size: 4.5rem;
+}
+.contact .row .map {
+    flex: 1 1 45rem;
+    width: 100%;
+    height: 55rem;
+    object-fit: cover;
+}
+
+.contact .row form {
+    flex: 1 1 45rem;
+    padding: 5rem 2rem;
+    text-align: center;
+}
+
+.contact .row form h3 {
+    text-transform: uppercase;
+    font-size: 3.5rem;
+    color: #fff;
+}
+
+.contact .row form .inputBox {
+    display: flex;
+    align-items: center;
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+    background: var(--bg);
+    border: var(--border);
+}
+
+.contact .row form .inputBox span {
+    color: #fff;
+    font-size: 2rem;
+    padding-left: 2rem;
+}
+
+.contact .row form .inputBox input {
+    width: 100%;
+    padding: 2rem;
+    font-size: 1.7rem;
+    color: #fff;
+    text-transform: none;
+    background: none;
+}
+
+/* General Footer Styles */
+/* Footer General Styles */
+.footer {
+    background: var(--black);
+    text-align: center;
+    padding: 2rem 0; /* Increased padding for top and bottom */
+    color: #fff;
+}
+
+/* Share Section */
+.footer .share h3 {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+}
+
+.footer .share {
+    padding: 1rem 0;
+}
+
+.footer .share a {
+    display: inline-block;
+    height: 5rem;
+    width: 5rem;
+    line-height: 5rem; /* Center the icon vertically */
+    font-size: 2rem;
+    color: #fff;
+    border: var(--border);
+    margin: 1rem; /* Adjusted margin for better spacing */
+    border-radius: 50%;
+    transition: transform 0.3s, background-color 0.3s;
+}
+
+.footer .share a:hover {
+    background-color: var(--main-color);
+    transform: scale(1.1); /* Slight enlargement on hover */
+}
+
+/* Contact Section */
+.footer .contact h3 {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+}
+
+.footer .contact p {
+    font-size: 1.6rem;
+    margin: 0.5rem 0;
+}
+
+/* Links Section */
+.footer .links {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 2rem; /* Larger space between links */
+    padding: 2rem 0;
+}
+
+.footer .links h3 {
+    font-size: 2rem;
+    width: 100%; /* Ensure heading spans full width */
+    margin-bottom: 1rem;
+}
+
+.footer .links a {
+    font-size: 1.6rem;
+    color: #fff;
+    text-transform: capitalize;
+    border: var(--border);
+    padding: 0.5rem 2rem; /* Adjusted padding for links */
+    border-radius: 0.5rem;
+    transition: background-color 0.3s;
+}
+
+.footer .links a:hover {
+    background: var(--main-color);
+}
+
+/* Credit Section */
+.footer .credit {
+    font-size: 1.8rem;
+    color: #fff;
+    font-weight: lighter;
+    padding: 1.5rem 0;
+}
+
+.footer .credit span {
+    color: var(--main-color);
+}
