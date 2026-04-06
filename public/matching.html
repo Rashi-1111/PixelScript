@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PixelScript - Smart Matching</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/matching.css">
+    <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+    <div class="matching-container">
+        <header class="matching-header">
+            <div class="logo">
+                <img src="images/logo.png" alt="PixelScript Logo">
+            </div>
+        </header>
+
+        <main class="matching-content">
+            <div class="search-section">
+                <h2>Find Your Creative Partner</h2>
+                <div class="search-filters">
+                    <div class="filter-group">
+                        <label>Looking for:</label>
+                        <select id="partner-role">
+                            <option value="writer">Writer</option>
+                            <option value="artist">Artist</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Genre:</label>
+                        <select id="genre">
+                            <option value="fantasy">Fantasy</option>
+                            <option value="scifi">Sci-Fi</option>
+                            <option value="romance">Romance</option>
+                            <option value="mystery">Mystery</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Country:</label>
+                        <select id="country">
+                            <option value="USA">United States</option>
+                            <option value="Canada">Canada</option>
+                            <option value="UK">United Kingdom</option>
+                            <option value="Spain">Spain</option>
+                            <option value="India">India</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Age Group:</label>
+                        <select id="age-group">
+                            <option value="18-24">18-24</option>
+                            <option value="25-34">25-34</option>
+                            <option value="35-44">35-44</option>
+                            <option value="45+">45+</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Experience (years):</label>
+                        <select id="experience">
+                            <option value="0-1">0-1</option>
+                            <option value="1-5">1-5</option>
+                            <option value="5-10">5-10</option>
+                            <option value="10+">10+</option>
+                        </select>
+                    </div>
+                </div>
+                <button id="findMatchesBtn" class="search-btn">Find Matches</button>
+            </div>
+
+            <div class="results-section">
+                <h3>Available Partners</h3>
+                <div class="partners-grid" id="partnersGrid">
+                    <!-- Partner cards will be dynamically inserted by JavaScript -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/matching.js"></script>
+</body>
+</html>
