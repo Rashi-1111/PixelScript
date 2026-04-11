@@ -3,15 +3,15 @@ if (typeof window.getDashboardPathForRole !== 'function') {
     window.getDashboardPathForRole = function getDashboardPathForRoleFallback(role) {
         switch ((role || '').toLowerCase()) {
             case 'consumer':
-                return 'stories.html';
+                return '/stories.html';
             case 'writer':
-                return 'home.html';
+                return '/home.html';
             case 'artist':
-                return 'home.html';
+                return '/home.html';
             case 'editor':
-                return 'home.html';
+                return '/creator-dashboard.html';
             default:
-                return 'home.html';
+                return '/home.html';
         }
     };
 }
@@ -51,13 +51,14 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
         const data = await response.json();
         
         if (response.ok) {
-            // Store token in both localStorage and sessionStorage
-            localStorage.setItem('token', data.token);
-            sessionStorage.setItem('token', data.token);
-            // Store user data
+            // Keep only user snapshot on client; auth is persisted via HttpOnly cookie.
             sessionStorage.setItem('user', JSON.stringify(data.user));
-            
-            window.location.href = window.getDashboardPathForRole(data.user.role);
+
+            const normalizedRole = String(data.user?.role || '').toLowerCase();
+            const redirectPath = (normalizedRole === 'writer' || normalizedRole === 'artist')
+                ? '/home.html'
+                : window.getDashboardPathForRole(normalizedRole);
+            window.location.href = redirectPath;
         } else {
             showError('generalError', data.message || 'Invalid email or password');
         }
@@ -73,21 +74,62 @@ function isLoggedIn() {
 }
 
 // Logout function
-function handleLogout() {
+async function handleLogout() {
+    try {
+        await fetch('/api/users/logout', {
+            method: 'POST'
+        });
+    } catch (error) {
+        // Ignore logout request failure and proceed with local cleanup.
+    }
+
     sessionStorage.removeItem('user');
-    localStorage.removeItem('token');
-    sessionStorage.removeItem('token');
+    localStorage.removeItem('user');
     window.location.href = 'login.html';
 }
 
+async function fetchCurrentUserFromCookie() {
+    try {
+        const response = await fetch('/api/users/me', {
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                Pragma: 'no-cache',
+                Expires: '0'
+            }
+        });
+
+        if (!response.ok) {
+            return null;
+        }
+
+        return await response.json();
+    } catch (error) {
+        return null;
+    }
+}
+
 // Check auth on page load for protected routes
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     const isProtectedRoute = !window.location.pathname.includes('login.html') && 
                             !window.location.pathname.includes('register.html') &&
                             !window.location.pathname.includes('home.html');
+    const isHomeRoute = window.location.pathname.includes('home.html');
 
-    if (isProtectedRoute && !isLoggedIn()) {
+    const currentUser = await fetchCurrentUserFromCookie();
+    if (currentUser) {
+        sessionStorage.setItem('user', JSON.stringify(currentUser));
+    } else {
+        sessionStorage.removeItem('user');
+    }
+
+    if (isProtectedRoute && !currentUser) {
         window.location.href = 'login.html';
+        return;
+    }
+
+    // Keep reader/consumer accounts out of writer-artist home view.
+    if (isHomeRoute && currentUser && currentUser.role === 'consumer') {
+        window.location.href = 'stories.html';
     }
 });
 
@@ -171,6 +213,3 @@ const urlParams = new URLSearchParams(window.location.search);
 if (urlParams.get('registered') === 'true') {
     showError('generalError', 'Registration successful! Please login.', 'success');
 }
-const isProtectedRoute = !window.location.pathname.includes('login.html') && 
-                        !window.location.pathname.includes('register.html') &&
-                        !window.location.pathname.includes('home.html');

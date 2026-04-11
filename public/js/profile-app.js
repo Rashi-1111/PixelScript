@@ -2,13 +2,8 @@ if (!window.__pixelScriptProfileAppLoaded) {
     window.__pixelScriptProfileAppLoaded = true;
     let currentProfile = null;
 
-    function getToken() {
-        return localStorage.getItem('token') || sessionStorage.getItem('token');
-    }
-
     function authHeaders(extraHeaders = {}) {
         return {
-            Authorization: `Bearer ${getToken()}`,
             ...extraHeaders
         };
     }
@@ -29,6 +24,37 @@ if (!window.__pixelScriptProfileAppLoaded) {
 
     function formatRole(role) {
         return role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Writer';
+    }
+
+    function escapeHtml(value) {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function sanitizeUrl(value) {
+        const url = String(value || '').trim();
+        if (!url) {
+            return '';
+        }
+
+        if (url.startsWith('/')) {
+            return url;
+        }
+
+        try {
+            const parsed = new URL(url, window.location.origin);
+            if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+                return parsed.href;
+            }
+        } catch (error) {
+            return '';
+        }
+
+        return '';
     }
 
     function updateStoredProfile(user) {
@@ -140,23 +166,34 @@ if (!window.__pixelScriptProfileAppLoaded) {
     }
 
     function createWorkCard(work) {
+        const title = escapeHtml(work.title || 'Untitled');
+        const description = escapeHtml(work.description || '');
+        const safeFileUrl = sanitizeUrl(work.fileUrl);
+        const safeFileType = escapeHtml(work.fileType || 'image');
+        const workId = escapeHtml(work._id || '');
+
         const media = work.fileType === 'image'
-            ? `<img src="${work.fileUrl}" alt="${work.title}">`
+            ? `<img src="${safeFileUrl}" alt="${title}">`
             : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:4rem;color:#3f6d71;"><i class="fas fa-file-alt"></i></div>`;
 
         return `
-            <div class="work-item" data-work-id="${work._id}">
+            <div class="work-item" data-work-id="${workId}">
                 ${media}
                 <div class="work-overlay">
                     <div class="work-info">
-                        <h3>${work.title}</h3>
-                        <p>${work.description || ''}</p>
+                        <h3>${title}</h3>
+                        <p>${description}</p>
                     </div>
                     <div class="work-action-buttons">
-                        <button class="view-btn" onclick="viewWork('${work.fileUrl}', '${work.fileType}')">
+                        <button
+                            class="view-btn"
+                            type="button"
+                            data-work-action="view"
+                            data-work-src="${encodeURIComponent(safeFileUrl)}"
+                            data-work-type="${safeFileType}">
                             <i class="fas fa-eye"></i>
                         </button>
-                        <button class="delete-btn" onclick="deleteWork('${work._id}')">
+                        <button class="delete-btn" type="button" data-work-action="delete" data-work-id="${workId}">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -166,11 +203,6 @@ if (!window.__pixelScriptProfileAppLoaded) {
     }
 
     async function loadProfile() {
-        if (!getToken()) {
-            window.location.href = '/login.html';
-            return;
-        }
-
         try {
             const response = await fetch('/api/users/me', {
                 headers: authHeaders({
@@ -181,6 +213,11 @@ if (!window.__pixelScriptProfileAppLoaded) {
             });
 
             if (!response.ok) {
+                if (response.status === 401) {
+                    sessionStorage.removeItem('user');
+                    window.location.href = '/login.html';
+                    return;
+                }
                 throw new Error('Failed to load profile');
             }
 
@@ -192,7 +229,7 @@ if (!window.__pixelScriptProfileAppLoaded) {
 
     async function loadWorks() {
         const worksGrid = document.getElementById('worksGrid');
-        if (!worksGrid || !getToken()) {
+            if (!worksGrid) {
             return;
         }
 
@@ -214,9 +251,6 @@ if (!window.__pixelScriptProfileAppLoaded) {
     }
 
     async function loadCollaborationCount() {
-        if (!getToken()) {
-            return;
-        }
 
         try {
             const response = await fetch('/api/users/collaborations', {
@@ -234,10 +268,97 @@ if (!window.__pixelScriptProfileAppLoaded) {
         }
     }
 
-    async function saveProfile() {
-        if (!getToken()) {
+    function escapeHtml(value) {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function buildCollaborationHref(collaboration) {
+        if (collaboration.status === 'active') {
+            return `collab.html?room=${encodeURIComponent(collaboration.room)}&collaborationId=${encodeURIComponent(collaboration._id)}${collaboration.currentUserRole === 'artist' ? '&host=1' : ''}`;
+        }
+
+        if (collaboration.publishedStoryId) {
+            return `reader.html?id=${encodeURIComponent(collaboration.publishedStoryId)}`;
+        }
+
+        return '#';
+    }
+
+    function renderCollaborations(collaborations) {
+        const grid = document.getElementById('activeCollaborationsGrid');
+        if (!grid) {
             return;
         }
+
+        const activeCollaborations = collaborations.filter(item => item.status === 'active');
+
+        if (!activeCollaborations.length) {
+            grid.innerHTML = '<p>No active collaborations yet.</p>';
+            return;
+        }
+
+        grid.innerHTML = activeCollaborations.map(item => {
+            const partnerName = item.partner?.name || item.partner?.username || 'Collaborator';
+            const title = item.storyTitle || item.title || 'Untitled collaboration';
+            const subtitle = item.status === 'active' ? `with ${partnerName}` : `Published with ${partnerName}`;
+
+            return `
+                <a href="${buildCollaborationHref(item)}" class="collab-item">
+                    <div class="collab-image">
+                        <img src="${escapeHtml(item.coverImage || 'images/default-cover.png')}" alt="${escapeHtml(title)}">
+                    </div>
+                    <div class="collab-info">
+                        <h3>${escapeHtml(title)}</h3>
+                        <p>${escapeHtml(subtitle)}</p>
+                    </div>
+                </a>
+            `;
+        }).join('');
+    }
+
+    async function loadCollaborations() {
+        try {
+            const response = await fetch('/api/collab/my-collaborations', {
+                headers: authHeaders()
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to load collaborations');
+            }
+
+            const collaborations = await response.json();
+            setText('collabsCount', String(collaborations.length));
+            renderCollaborations(collaborations);
+        } catch (error) {
+            console.error('Error loading collaborations:', error);
+            const grid = document.getElementById('activeCollaborationsGrid');
+            if (grid) {
+                grid.innerHTML = '<p>Failed to load collaborations.</p>';
+            }
+        }
+    }
+
+    async function handleLogout() {
+        try {
+            await fetch('/api/users/logout', {
+                method: 'POST'
+            });
+        } catch (error) {
+            // Ignore network errors during logout request.
+        }
+
+        localStorage.removeItem('user');
+        sessionStorage.removeItem('user');
+        localStorage.removeItem('userProfile');
+        window.location.href = 'login.html';
+    }
+
+    async function saveProfile() {
 
         const draft = getDraftProfile();
         const payload = {
@@ -274,7 +395,7 @@ if (!window.__pixelScriptProfileAppLoaded) {
     }
 
     async function updateProfilePicture(file) {
-        if (!file || !getToken()) {
+        if (!file) {
             return;
         }
 
@@ -340,7 +461,7 @@ if (!window.__pixelScriptProfileAppLoaded) {
     }
 
     async function deleteWork(workId) {
-        if (!workId || !getToken()) {
+        if (!workId) {
             return;
         }
 
@@ -362,16 +483,39 @@ if (!window.__pixelScriptProfileAppLoaded) {
     }
 
     function viewWork(src, fileType = 'image') {
+        const safeSrc = sanitizeUrl(src);
+        if (!safeSrc) {
+            return;
+        }
+
         const modal = document.createElement('div');
         modal.className = 'view-work-modal';
-        modal.innerHTML = `
-            <div class="modal-content">
-                <span class="close-btn">&times;</span>
-                ${fileType === 'image'
-                    ? `<img src="${src}" alt="Work Preview" class="work-preview">`
-                    : `<iframe src="${src}" title="Work Preview" style="width:100%;height:80vh;border:none;"></iframe>`}
-            </div>
-        `;
+        const content = document.createElement('div');
+        content.className = 'modal-content';
+
+        const closeButton = document.createElement('span');
+        closeButton.className = 'close-btn';
+        closeButton.textContent = '\u00d7';
+
+        content.appendChild(closeButton);
+
+        if (fileType === 'image') {
+            const image = document.createElement('img');
+            image.src = safeSrc;
+            image.alt = 'Work Preview';
+            image.className = 'work-preview';
+            content.appendChild(image);
+        } else {
+            const frame = document.createElement('iframe');
+            frame.src = safeSrc;
+            frame.title = 'Work Preview';
+            frame.style.width = '100%';
+            frame.style.height = '80vh';
+            frame.style.border = 'none';
+            content.appendChild(frame);
+        }
+
+        modal.appendChild(content);
         document.body.appendChild(modal);
 
         modal.querySelector('.close-btn').onclick = () => modal.remove();
@@ -405,6 +549,29 @@ if (!window.__pixelScriptProfileAppLoaded) {
     }
 
     function bindEvents() {
+        const worksGrid = document.getElementById('worksGrid');
+        if (worksGrid && !worksGrid.dataset.profileAppBound) {
+            worksGrid.addEventListener('click', event => {
+                const trigger = event.target.closest('button[data-work-action]');
+                if (!trigger) {
+                    return;
+                }
+
+                const action = trigger.dataset.workAction;
+                if (action === 'view') {
+                    const src = decodeURIComponent(trigger.dataset.workSrc || '');
+                    const type = trigger.dataset.workType || 'image';
+                    viewWork(src, type);
+                    return;
+                }
+
+                if (action === 'delete') {
+                    deleteWork(trigger.dataset.workId || '');
+                }
+            });
+            worksGrid.dataset.profileAppBound = 'true';
+        }
+
         const editAboutButton = document.getElementById('edit-about-btn');
         if (editAboutButton && !editAboutButton.dataset.profileAppBound) {
             editAboutButton.addEventListener('click', openAboutModal);
@@ -478,7 +645,7 @@ if (!window.__pixelScriptProfileAppLoaded) {
         bindEvents();
         loadProfile();
         loadWorks();
-        loadCollaborationCount();
+        loadCollaborations();
     }
 
     window.openUploadModal = openUploadModal;
@@ -494,6 +661,7 @@ if (!window.__pixelScriptProfileAppLoaded) {
     };
     window.viewWork = viewWork;
     window.deleteWork = deleteWork;
+    window.handleLogout = handleLogout;
     window.handleProfilePicChange = function handleProfilePicChange(event) {
         const file = event.target.files?.[0];
         if (file) {

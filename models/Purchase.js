@@ -1,3 +1,4 @@
+
 const mongoose = require('mongoose');
 
 const purchaseSchema = new mongoose.Schema({
@@ -8,16 +9,18 @@ const purchaseSchema = new mongoose.Schema({
     },
     story: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Story',
-        required: true
+        ref: 'Story'
+    },
+    storyId: {
+        type: String // For sample stories that don't have MongoDB ObjectId
     },
     chapter: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Story.chapters' // Reference to specific chapter
+        ref: 'Story.chapters'
     },
     purchaseType: {
         type: String,
-        enum: ['chapter', 'full_story'],
+        enum: ['chapter', 'full_story', 'sample_story'],
         required: true
     },
     amount: {
@@ -27,11 +30,22 @@ const purchaseSchema = new mongoose.Schema({
     },
     paymentMethod: {
         type: String,
-        default: 'stripe' // Or whatever payment processor you use
+        default: 'razorpay'
     },
     paymentId: {
         type: String,
         required: true
+    },
+    razorpayOrderId: {
+        type: String
+    },
+    razorpaySignature: {
+        type: String
+    },
+    status: {
+        type: String,
+        enum: ['pending', 'completed', 'failed'],
+        default: 'pending'
     },
     purchasedAt: {
         type: Date,
@@ -40,6 +54,7 @@ const purchaseSchema = new mongoose.Schema({
 });
 
 // Compound index to prevent duplicate purchases
-purchaseSchema.index({ consumer: 1, story: 1, chapter: 1 }, { unique: true });
+purchaseSchema.index({ consumer: 1, story: 1, chapter: 1 }, { unique: true, sparse: true });
+purchaseSchema.index({ consumer: 1, storyId: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Purchase', purchaseSchema);

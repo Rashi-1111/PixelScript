@@ -20,6 +20,14 @@ const coverUpload = multer({
     }
 });
 
+function parsePositiveInt(value, fallback) {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+        return fallback;
+    }
+    return parsed;
+}
+
 function parseChapters(value) {
     if (!value) {
         return [];
@@ -98,6 +106,17 @@ function normalizeProjectPanels(panels = [], fallbackCanvas = '', fallbackArtwor
     return fallbackPanels;
 }
 
+function buildCreatedBy(story) {
+    const artistName = story.sourceCollaboration?.artist?.name || story.sourceCollaboration?.artist?.username;
+    const writerName = story.sourceCollaboration?.writer?.name || story.sourceCollaboration?.writer?.username || story.author?.name || story.author?.username;
+
+    if (artistName && writerName) {
+        return `${artistName} and ${writerName}`;
+    }
+
+    return writerName || artistName || story.author?.name || story.author?.username || 'Unknown creator';
+}
+
 function mapPreviewStory(story) {
     const projectPanels = normalizeProjectPanels(
         story.projectBoard?.panels || [],
@@ -114,6 +133,7 @@ function mapPreviewStory(story) {
         price: story.price,
         createdAt: story.createdAt,
         author: story.author,
+        createdBy: buildCreatedBy(story),
         chapterCount: story.chapters.length,
         freeChapterCount: Math.min(story.chapters.length, 2),
         previewImage: story.chapters?.[0]?.panels?.[0]?.imageUrl || projectPanels[0]?.imageUrl || story.coverImage,
@@ -127,10 +147,11 @@ function mapPreviewStory(story) {
     };
 }
 
-function buildStoryResponse(story, purchases = [], currentUserId = null) {
+function buildStoryResponse(story, purchases = [], currentUserId = null, currentUserRole = null) {
     const storyData = typeof story.toObject === 'function' ? story.toObject() : story;
     const authorId = story.author?._id ? story.author._id.toString() : story.author.toString();
     const isAuthor = currentUserId ? authorId === currentUserId.toString() : false;
+    const isCreator = currentUserRole && ['artist', 'writer', 'editor'].includes(currentUserRole);
     const hasFullStoryPurchase = purchases.some(purchase => purchase.purchaseType === 'full_story');
     const purchasedChapterIds = purchases
         .map(purchase => purchase.chapter ? purchase.chapter.toString() : null)
@@ -139,7 +160,7 @@ function buildStoryResponse(story, purchases = [], currentUserId = null) {
     const chapters = storyData.chapters.map(chapter => {
         const chapterId = chapter._id.toString();
         const isFree = chapter.order <= 2;
-        const hasAccess = isAuthor || hasFullStoryPurchase || isFree || purchasedChapterIds.includes(chapterId);
+        const hasAccess = isAuthor || isCreator || hasFullStoryPurchase || isFree || purchasedChapterIds.includes(chapterId);
 
         return {
             _id: chapter._id,
@@ -154,6 +175,7 @@ function buildStoryResponse(story, purchases = [], currentUserId = null) {
 
     return {
         ...storyData,
+        createdBy: buildCreatedBy(storyData),
         chapters,
         isAuthor,
         hasFullStoryPurchase,
@@ -239,8 +261,21 @@ async function enrichStoryProjectBoard(storyDocument) {
 
 router.get('/published', async (req, res) => {
     try {
+        const page = parsePositiveInt(req.query.page, 1);
+        const limit = Math.min(parsePositiveInt(req.query.limit, 24), 60);
+        const skip = (page - 1) * limit;
+
         const stories = await Story.find({ isPublished: true })
             .populate('author', 'name username profilePicture')
+            .populate({
+                path: 'sourceCollaboration',
+                populate: [
+                    { path: 'artist', select: 'name username profilePicture' },
+                    { path: 'writer', select: 'name username profilePicture' }
+                ]
+            })
+            .skip(skip)
+            .limit(limit)
             .sort({ createdAt: -1 });
 
         res.json(stories.map(mapPreviewStory));
@@ -263,7 +298,14 @@ router.get('/mine', auth, async (req, res) => {
 router.get('/public/:id', async (req, res) => {
     try {
         let story = await Story.findOne({ _id: req.params.id, isPublished: true })
-            .populate('author', 'name username profilePicture');
+            .populate('author', 'name username profilePicture')
+            .populate({
+                path: 'sourceCollaboration',
+                populate: [
+                    { path: 'artist', select: 'name username profilePicture' },
+                    { path: 'writer', select: 'name username profilePicture' }
+                ]
+            });
 
         if (!story) {
             return res.status(404).json({ error: 'Story not found' });
@@ -280,7 +322,14 @@ router.get('/public/:id', async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
     try {
         let story = await Story.findById(req.params.id)
-            .populate('author', 'name username profilePicture');
+            .populate('author', 'name username profilePicture')
+            .populate({
+                path: 'sourceCollaboration',
+                populate: [
+                    { path: 'artist', select: 'name username profilePicture' },
+                    { path: 'writer', select: 'name username profilePicture' }
+                ]
+            });
 
         if (!story) {
             return res.status(404).json({ error: 'Story not found' });
@@ -292,7 +341,7 @@ router.get('/:id', auth, async (req, res) => {
         });
 
         story = await enrichStoryProjectBoard(story);
-        res.json(buildStoryResponse(story, purchases, req.user.id));
+        res.json(buildStoryResponse(story, purchases, req.user.id, req.user.role));
     } catch (error) {
         console.error('Error fetching story:', error);
         res.status(500).json({ error: 'Server error' });
@@ -321,7 +370,7 @@ router.post('/', auth, coverUpload.single('coverImage'), async (req, res) => {
         res.status(201).json(story);
     } catch (error) {
         console.error('Error creating story:', error);
-        res.status(500).json({ error: error.message || 'Server error' });
+        res.status(500).json({ error: 'Server error' });
     }
 });
 

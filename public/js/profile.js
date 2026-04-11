@@ -1,15 +1,8 @@
 // Load user profile data
 async function loadProfile() {
     try {
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        if (!token) {
-            window.location.href = '/login.html';
-            return;
-        }
-
         const response = await fetch(`/api/users/me?t=${Date.now()}`, {
             headers: {
-                'Authorization': `Bearer ${token}`,
                 'Cache-Control': 'no-cache, no-store, must-revalidate',
                 'Pragma': 'no-cache',
                 'Expires': '0'
@@ -19,6 +12,9 @@ async function loadProfile() {
         if (response.ok) {
             const user = await response.json();
             displayProfile(user);
+        } else if (response.status === 401) {
+            sessionStorage.removeItem('user');
+            window.location.href = '/login.html';
         } else {
             throw new Error('Failed to load profile');
         }
@@ -114,12 +110,8 @@ if (legacyProfileImageInput) {
             formData.append('profilePicture', file);
 
             try {
-                const token = localStorage.getItem('token') || sessionStorage.getItem('token');
                 const response = await fetch('/api/users/profile-picture', {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    },
                     body: formData
                 });
 
@@ -157,14 +149,9 @@ async function saveProfile(e) {
     const skills = document.getElementById('skills').value.split(',').map(skill => skill.trim());
     formData.append('skills', JSON.stringify(skills));
 
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-
     try {
         const response = await fetch('/api/users/profile', {
             method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            },
             body: formData
         });
 

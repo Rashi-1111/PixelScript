@@ -1,31 +1,24 @@
-function getStoredToken() {
-    return localStorage.getItem('token') || sessionStorage.getItem('token');
-}
-
 function getDashboardPathForRole(role) {
     switch ((role || '').toLowerCase()) {
         case 'consumer':
-            return 'stories.html';
+            return '/stories.html';
         case 'writer':
-            return 'home.html';
+            return '/home.html';
         case 'artist':
-            return 'home.html';
+            return '/home.html';
         case 'editor':
-            return 'home.html';
+            return '/creator-dashboard.html';
         default:
-            return 'home.html';
+            return '/home.html';
     }
 }
 
 async function fetchCurrentUserForRouting() {
-    const token = getStoredToken();
-    if (!token) {
-        return null;
-    }
-
     const response = await fetch('/api/users/me', {
         headers: {
-            Authorization: `Bearer ${token}`
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            Pragma: 'no-cache',
+            Expires: '0'
         }
     });
 

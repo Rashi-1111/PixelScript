@@ -63,6 +63,30 @@
             line-height: 1.6;
         }
 
+        .hero-actions {
+            margin-top: 18px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .hero-link {
+            background: rgba(255, 255, 255, 0.16);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.24);
+            border-radius: 14px;
+            padding: 10px 14px;
+            font-weight: 700;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .hero-link:hover {
+            background: rgba(255, 255, 255, 0.24);
+        }
+
         .stats {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -263,6 +287,9 @@
             <div class="card hero-panel">
                 <h1 id="hero-title">Creator Workspace</h1>
                 <p id="hero-copy">Find your counterpart, align on the story, work together in a live room, and publish only when both sides approve.</p>
+                <div class="hero-actions">
+                    <a id="writer-space-link" class="hero-link" href="writer-space.html" style="display:none;"><i class="fas fa-feather-alt"></i> Open Writer Space</a>
+                </div>
             </div>
             <div class="card">
                 <div class="stats">
@@ -293,9 +320,16 @@
 
                 <div class="card">
                     <div class="section-head">
-                        <h3>Active Projects</h3>
+                        <h3>Active Collaborations</h3>
                     </div>
-                    <div id="collabs-list" class="list"></div>
+                    <div id="active-collabs-list" class="list"></div>
+                </div>
+
+                <div class="card">
+                    <div class="section-head">
+                        <h3>Published Stories</h3>
+                    </div>
+                    <div id="published-collabs-list" class="list"></div>
                 </div>
             </div>
         </section>
@@ -360,12 +394,8 @@
         let discoverProfiles = [];
         let collaborations = [];
 
-        function token() {
-            return localStorage.getItem('token') || sessionStorage.getItem('token');
-        }
-
         function authHeaders(extra = {}) {
-            return { Authorization: `Bearer ${token()}`, ...extra };
+            return { ...extra };
         }
 
         function escapeHtml(value) {
@@ -448,42 +478,118 @@
             `).join('');
         }
 
-        function renderCollaborations() {
-            const list = document.getElementById('collabs-list');
-            const active = collaborations.filter(item => item.status === 'active' || item.status === 'completed');
-            if (!active.length) {
-                list.innerHTML = '<div class="empty">No active collaborations yet. Send a request to start one.</div>';
+        function getStoryActionMeta(item) {
+            const actionRequest = item.storyActionRequest || {};
+            const requesterRole = actionRequest.requestedBy
+                ? (String(actionRequest.requestedBy) === String(item.artist?._id || item.artist) ? 'artist' : 'writer')
+                : null;
+            const waitingForCurrentUserApproval = Boolean(
+                actionRequest.status === 'pending'
+                && requesterRole
+                && requesterRole !== item.currentUserRole
+                && ((item.currentUserRole === 'artist' && !actionRequest.artistApproved) || (item.currentUserRole === 'writer' && !actionRequest.writerApproved))
+            );
+
+            return {
+                actionRequest,
+                waitingForCurrentUserApproval
+            };
+        }
+
+        function getStoryActionStatusText(item) {
+            const { actionRequest, waitingForCurrentUserApproval } = getStoryActionMeta(item);
+
+            if (actionRequest.status === 'pending') {
+                const actionLabel = actionRequest.type === 'delete' ? 'delete this story' : 'move this story back to active collaborations for editing';
+                return waitingForCurrentUserApproval
+                    ? `Your collaborator requested to ${actionLabel}.`
+                    : `Request sent to your collaborator to ${actionLabel}.`;
+            }
+
+            if (actionRequest.status === 'rejected') {
+                return 'The last edit or delete request was rejected.';
+            }
+
+            return '';
+        }
+
+        function getReaderViewHref(item) {
+            if (item?.publishedStoryId && item?.publishedChapterId) {
+                return `chapter-view.html?story=${encodeURIComponent(item.publishedStoryId)}&chapter=${encodeURIComponent(item.publishedChapterId)}`;
+            }
+
+            if (item?.publishedStoryId) {
+                return `reader.html?id=${encodeURIComponent(item.publishedStoryId)}`;
+            }
+
+            return 'stories.html';
+        }
+
+        function renderActiveCollaborations() {
+            const list = document.getElementById('active-collabs-list');
+            const activeCollaborations = collaborations.filter(item => item.status === 'active');
+            if (!activeCollaborations.length) {
+                list.innerHTML = '<div class="empty">No active collaborations right now.</div>';
                 return;
             }
 
-            list.innerHTML = active.map(item => `
+            list.innerHTML = activeCollaborations.map(item => {
+                const workspaceHref = `collab.html?room=${encodeURIComponent(item.room)}&collaborationId=${encodeURIComponent(item._id)}${item.currentUserRole === 'artist' ? '&host=1' : ''}`;
+                return `
                 <article class="collab-card">
                     <strong>${escapeHtml(item.title)}</strong>
                     <p class="muted">${escapeHtml(item.storyTitle || item.title)} • ${escapeHtml(item.chapterLabel || `Chapter ${item.chapterNumber || 1}`)}${item.chapterTitle ? ` • ${escapeHtml(item.chapterTitle)}` : ''}</p>
                     <p class="muted">${escapeHtml(item.storySynopsis || item.description || '')}</p>
                     <span class="pill">${escapeHtml(item.status)}</span>
-                    ${item.publishedStoryId ? '<span class="pill">Published to reader space</span>' : ''}
+                    ${item.publishedStoryId && !item.isPublishedLive ? '<span class="pill">Editing published story</span>' : ''}
+                    ${item.publishedStoryId && !item.isPublishedLive ? '<p class="muted">This chapter was reopened for editing. Publishing the updated version requires fresh approval from both collaborators.</p>' : ''}
                     <div class="actions">
-                        ${item.status === 'active' ? `<a class="btn-link primary" href="collab.html?room=${encodeURIComponent(item.room)}&collaborationId=${encodeURIComponent(item._id)}${item.currentUserRole === 'artist' ? '&host=1' : ''}"><i class="fas fa-people-arrows"></i> Open Workspace</a>` : ''}
-                        ${item.publishedStoryId ? `<a class="btn-link secondary" href="reader.html?id=${item.publishedStoryId}"><i class="fas fa-book-open"></i> Reader View</a>` : ''}
+                        <a class="btn-link primary" href="${workspaceHref}"><i class="fas fa-people-arrows"></i> Open Workspace</a>
+                        ${item.publishedStoryId && !item.isPublishedLive ? `<a class="btn-link secondary" href="${getReaderViewHref(item)}"><i class="fas fa-book-open"></i> Current Live Version</a>` : ''}
                     </div>
                 </article>
-            `).join('');
+            `;
+            }).join('');
+        }
+
+        function renderPublishedStories() {
+            const list = document.getElementById('published-collabs-list');
+            const publishedStories = collaborations.filter(item => item.isPublishedLive);
+            if (!publishedStories.length) {
+                list.innerHTML = '<div class="empty">No published stories yet.</div>';
+                return;
+            }
+
+            list.innerHTML = publishedStories.map(item => {
+                const { actionRequest, waitingForCurrentUserApproval } = getStoryActionMeta(item);
+                const statusText = getStoryActionStatusText(item);
+                return `
+                <article class="collab-card">
+                    <strong>${escapeHtml(item.storyTitle || item.title)}</strong>
+                    <p class="muted">${escapeHtml(item.chapterLabel || `Chapter ${item.chapterNumber || 1}`)}${item.chapterTitle ? ` • ${escapeHtml(item.chapterTitle)}` : ''}</p>
+                    <p class="muted">${escapeHtml(item.storySynopsis || item.description || '')}</p>
+                    <span class="pill">Published</span>
+                    ${statusText ? `<p class="muted">${escapeHtml(statusText)}</p>` : ''}
+                    <div class="actions">
+                        ${actionRequest.status !== 'pending' ? `<button class="secondary" type="button" onclick="requestStoryAction('${item._id}', 'edit')"><i class="fas fa-pen"></i> Request Edit</button>` : ''}
+                        ${actionRequest.status !== 'pending' ? `<button class="danger" type="button" onclick="requestStoryAction('${item._id}', 'delete')"><i class="fas fa-trash"></i> Request Delete</button>` : ''}
+                        ${waitingForCurrentUserApproval ? `<button class="primary" type="button" onclick="respondToStoryAction('${item._id}', 'approve')"><i class="fas fa-check"></i> Approve</button>` : ''}
+                        ${waitingForCurrentUserApproval ? `<button class="secondary" type="button" onclick="respondToStoryAction('${item._id}', 'reject')"><i class="fas fa-times"></i> Reject</button>` : ''}
+                        <a class="btn-link secondary" href="${getReaderViewHref(item)}"><i class="fas fa-book-open"></i> Reader View</a>
+                    </div>
+                </article>
+            `;
+            }).join('');
         }
 
         function updateStats() {
             document.getElementById('stat-discover').textContent = String(discoverProfiles.length);
             document.getElementById('stat-pending').textContent = String(collaborations.filter(item => item.status === 'pending').length);
             document.getElementById('stat-active').textContent = String(collaborations.filter(item => item.status === 'active').length);
-            document.getElementById('stat-published').textContent = String(collaborations.filter(item => item.publishedStoryId).length);
+            document.getElementById('stat-published').textContent = String(collaborations.filter(item => item.isPublishedLive).length);
         }
 
         async function loadDashboard() {
-            if (!token()) {
-                window.location.href = 'login.html';
-                return;
-            }
-
             const [userRes, discoverRes, collabRes] = await Promise.all([
                 fetch('/api/users/me', { headers: authHeaders() }),
                 fetch('/api/collab/discover', { headers: authHeaders() }),
@@ -501,6 +607,11 @@
                 return;
             }
 
+            const writerSpaceLink = document.getElementById('writer-space-link');
+            if (writerSpaceLink) {
+                writerSpaceLink.style.display = currentUser.role === 'writer' ? 'inline-flex' : 'none';
+            }
+
             document.getElementById('hero-title').textContent = currentUser.role === 'writer' ? 'Writer Studio' : 'Artist Studio';
             document.getElementById('hero-copy').textContent = currentUser.role === 'writer'
                 ? 'Find an artist, pitch the story, collaborate in a common room, and publish only after both of you approve.'
@@ -512,8 +623,41 @@
 
             renderDiscover();
             renderRequests();
-            renderCollaborations();
+            renderActiveCollaborations();
+            renderPublishedStories();
             updateStats();
+        }
+
+        async function requestStoryAction(id, type) {
+            const response = await fetch(`/api/collab/${id}/story-action-request`, {
+                method: 'POST',
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ type })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                alert(data.message || 'Failed to send request');
+                return;
+            }
+
+            await loadDashboard();
+        }
+
+        async function respondToStoryAction(id, action) {
+            const response = await fetch(`/api/collab/${id}/story-action-request`, {
+                method: 'PUT',
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ action })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                alert(data.message || 'Failed to update request');
+                return;
+            }
+
+            await loadDashboard();
         }
 
         async function respondToRequest(id, action) {
@@ -574,6 +718,8 @@
         window.openRequestModal = openRequestModal;
         window.closeRequestModal = closeRequestModal;
         window.respondToRequest = respondToRequest;
+        window.requestStoryAction = requestStoryAction;
+        window.respondToStoryAction = respondToStoryAction;
 
         loadDashboard().catch(error => {
             console.error(error);

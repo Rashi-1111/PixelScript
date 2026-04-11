@@ -5,7 +5,6 @@ const cors = require('cors');
 const path = require('path');
 const http = require('http');
 const socketIo = require('socket.io');
-const fs = require('fs');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const connectDB = require('./config/db');
@@ -17,15 +16,43 @@ const storyRoutes = require('./routes/story');
 const purchaseRoutes = require('./routes/purchase');
 const contactRoutes = require('./routes/contact');
 const workspaceRoutes = require('./routes/workspace');
+const aiRoutes = require('./routes/ai');
 
 // Import middleware
 const errorHandler = require('./middleware/error');
 
 const app = express();
 const server = http.createServer(app);
+const sessionSecret = process.env.SESSION_SECRET;
+const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+const publicRoot = path.resolve(__dirname, 'public');
+const socketAllowedOrigins = (process.env.SOCKET_CORS_ORIGIN || process.env.CORS_ORIGIN || 'http://localhost:3000')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean);
+const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
+const ROOM_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+
+if (!sessionSecret) {
+    throw new Error('Missing SESSION_SECRET environment variable');
+}
+
+if (!mongoUri) {
+    throw new Error('Missing MONGO_URI (or MONGODB_URI) environment variable');
+}
+
+function resolveSafePublicPath(requestPath = '') {
+    const normalized = path.posix.normalize(`/${String(requestPath || '')}`).replace(/^\/+/, '');
+    const resolved = path.resolve(publicRoot, normalized);
+    if (resolved === publicRoot || resolved.startsWith(`${publicRoot}${path.sep}`)) {
+        return resolved;
+    }
+    return null;
+}
+
 const io = socketIo(server, {
     cors: {
-        origin: "*",
+        origin: socketAllowedOrigins,
         methods: ["GET", "POST"]
     }
 });
@@ -48,11 +75,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Add session middleware
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'your-secret-key',
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     store: MongoStore.create({
-        mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/pixelscript',
+        mongoUrl: mongoUri,
         ttl: 24 * 60 * 60 // 1 day
     }),
     cookie: {
@@ -70,38 +97,59 @@ app.use('/api/stories', storyRoutes);
 app.use('/api/purchases', purchaseRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/workspaces', workspaceRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Public routes that don't require authentication
 app.get('/collaborations/:page', (req, res) => {
-    const filePath = path.join(__dirname, 'public/collaborations', req.params.page);
-    if (fs.existsSync(filePath)) {
-        res.sendFile(filePath);
-    } else {
-        res.redirect('/login.html');
+    const safePath = resolveSafePublicPath(`collaborations/${req.params.page}`);
+    if (!safePath) {
+        return res.status(400).send('Invalid path');
     }
+
+    return res.sendFile(safePath, error => {
+        if (error) {
+            return res.redirect('/login.html');
+        }
+    });
 });
 
 // Handle all other routes by serving the appropriate HTML file
 app.get('*', (req, res) => {
-    const filePath = path.join(__dirname, 'public', req.path);
-    if (fs.existsSync(filePath)) {
-        if (req.path.startsWith('/collaborations/')) {
-            // For collaboration pages, check if user is authenticated
-            if (req.session && req.session.userId) {
-                res.sendFile(filePath);
-            } else {
-                res.redirect('/login.html');
-            }
-        } else {
-            res.sendFile(filePath);
-        }
-    } else {
-        res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    const safePath = resolveSafePublicPath(req.path);
+    const indexPath = path.join(publicRoot, 'index.html');
+
+    if (!safePath) {
+        return res.status(400).send('Invalid path');
     }
+
+    if (req.path.startsWith('/collaborations/') && !(req.session && req.session.userId)) {
+        return res.redirect('/login.html');
+    }
+
+    return res.sendFile(safePath, error => {
+        if (error) {
+            return res.sendFile(indexPath);
+        }
+    });
 });
 
 // Store active collaborations
 const activeCollaborations = new Map();
+
+function touchCollaboration(collaboration) {
+    if (collaboration) {
+        collaboration.lastActivity = Date.now();
+    }
+}
+
+setInterval(() => {
+    const cutoff = Date.now() - ROOM_TTL_MS;
+    activeCollaborations.forEach((collaboration, room) => {
+        if ((collaboration.lastActivity || 0) < cutoff) {
+            activeCollaborations.delete(room);
+        }
+    });
+}, ROOM_CLEANUP_INTERVAL_MS);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
@@ -115,16 +163,15 @@ io.on('connection', (socket) => {
                 users: new Map(), // Changed to Map to store user type
                 canvasState: null,
                 chat: [],
-                primaryUser: isPrimaryUser ? socket.id : null
+                primaryUser: isPrimaryUser ? socket.id : null,
+                lastActivity: Date.now()
             });
         }
         const collab = activeCollaborations.get(room);
-        
-        // Always ensure the room has a primary user. Prefer the claimed host,
-        // but fall back to the first user who joins if needed.
-        if (!collab.primaryUser) {
-            collab.primaryUser = socket.id;
-        } else if (isPrimaryUser) {
+        touchCollaboration(collab);
+
+        // Only a client that explicitly joins as primary can become the drawer.
+        if (isPrimaryUser) {
             collab.primaryUser = socket.id;
         }
         
@@ -146,14 +193,28 @@ io.on('connection', (socket) => {
     });
 
     // Handle chat messages
-    socket.on('chatMessage', ({ room, message, sender }) => {
-        socket.to(room).emit('chatMessage', { message, sender });
+    socket.on('chatMessage', payload => {
+        const room = payload?.room;
+        if (!room || !activeCollaborations.has(room)) {
+            return;
+        }
+
+        const collab = activeCollaborations.get(room);
+        touchCollaboration(collab);
+
+        socket.to(room).emit('chatMessage', {
+            message: String(payload?.message || ''),
+            sender: String(payload?.sender || 'Collaborator'),
+            sentAt: payload?.sentAt || new Date().toISOString(),
+            attachment: payload?.attachment || null
+        });
     });
 
     // Handle drawing events - only allow from primary user
     socket.on('draw', (data) => {
         const collab = activeCollaborations.get(data.room);
         if (collab && socket.id === collab.primaryUser) {
+            touchCollaboration(collab);
             socket.to(data.room).emit('draw', data);
         }
     });
@@ -162,6 +223,7 @@ io.on('connection', (socket) => {
     socket.on('canvasState', (data) => {
         const collab = activeCollaborations.get(data.room);
         if (collab && socket.id === collab.primaryUser) {
+            touchCollaboration(collab);
             collab.canvasState = data.state;
             socket.to(data.room).emit('canvasState', data.state);
         }
@@ -171,7 +233,11 @@ io.on('connection', (socket) => {
     socket.on('clear', (data) => {
         const collab = activeCollaborations.get(data.room);
         if (collab && socket.id === collab.primaryUser) {
-            socket.to(data.room).emit('clear');
+            touchCollaboration(collab);
+            if (typeof data.state === 'string') {
+                collab.canvasState = data.state;
+            }
+            socket.to(data.room).emit('clear', { state: data.state || '' });
         }
     });
 
@@ -179,14 +245,22 @@ io.on('connection', (socket) => {
     socket.on('undo', (data) => {
         const collab = activeCollaborations.get(data.room);
         if (collab && socket.id === collab.primaryUser) {
-            socket.to(data.room).emit('undo');
+            touchCollaboration(collab);
+            if (typeof data.state === 'string') {
+                collab.canvasState = data.state;
+            }
+            socket.to(data.room).emit('undo', { state: data.state || '' });
         }
     });
 
     socket.on('redo', (data) => {
         const collab = activeCollaborations.get(data.room);
         if (collab && socket.id === collab.primaryUser) {
-            socket.to(data.room).emit('redo');
+            touchCollaboration(collab);
+            if (typeof data.state === 'string') {
+                collab.canvasState = data.state;
+            }
+            socket.to(data.room).emit('redo', { state: data.state || '' });
         }
     });
 

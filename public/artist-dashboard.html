@@ -195,7 +195,7 @@
                 <h1>Artist Studio</h1>
                 <p>Keep your artwork, portfolio pieces, and collaboration workspace in one place. Jump back into the canvas, upload work to your profile, or review projects you want to illustrate next.</p>
                 <div class="action-row">
-                    <a class="btn btn-primary" href="collab.html"><i class="fas fa-pen-ruler"></i> Open Workspace</a>
+                    <a class="btn btn-primary" href="creator-dashboard.html"><i class="fas fa-pen-ruler"></i> Open Collaboration Hub</a>
                     <a class="btn btn-secondary" href="profile.html"><i class="fas fa-images"></i> Manage Portfolio</a>
                     <a class="btn btn-secondary" href="matching.html"><i class="fas fa-user-friends"></i> Find Writers</a>
                 </div>
@@ -238,8 +238,8 @@
                     <h2>Artist Shortcuts</h2>
                 </div>
                 <div class="quick-links">
-                    <a class="quick-link" href="collab.html">
-                        <span><strong>Shared Workspace</strong><br><span class="muted">Resume saved canvas and files</span></span>
+                    <a class="quick-link" href="creator-dashboard.html">
+                        <span><strong>Shared Workspace</strong><br><span class="muted">Open a collaboration and resume the real studio</span></span>
                         <i class="fas fa-arrow-right"></i>
                     </a>
                     <a class="quick-link" href="profile.html">
@@ -257,25 +257,19 @@
 
     <script src="js/role-router.js"></script>
     <script>
-        function getToken() {
-            return localStorage.getItem('token') || sessionStorage.getItem('token');
-        }
-
         async function loadArtistDashboard() {
-            const token = getToken();
-            if (!token) {
-                window.location.href = 'login.html';
-                return;
-            }
-
             try {
                 const [profileResponse, worksResponse, collabResponse] = await Promise.all([
-                    fetch('/api/users/me', { headers: { Authorization: `Bearer ${token}` } }),
-                    fetch('/api/users/works', { headers: { Authorization: `Bearer ${token}` } }),
-                    fetch('/api/users/collaborations', { headers: { Authorization: `Bearer ${token}` } })
+                    fetch('/api/users/me'),
+                    fetch('/api/users/works'),
+                    fetch('/api/users/collaborations')
                 ]);
 
                 if (!profileResponse.ok) {
+                    if (profileResponse.status === 401) {
+                        window.location.href = 'login.html';
+                        return;
+                    }
                     throw new Error('Failed to load profile');
                 }
 

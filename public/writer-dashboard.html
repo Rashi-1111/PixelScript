@@ -308,8 +308,8 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="story-price">Price per Chapter ($)</label>
-                    <input type="number" id="story-price" min="0" step="0.01" value="1.99">
+                    <label for="story-price">Price per Chapter (fixed at ₹1)</label>
+                    <input type="number" id="story-price" min="1" step="1" value="1" readonly>
                 </div>
 
                 <div class="form-group">
@@ -337,26 +337,22 @@
         let chapters = [];
 
         // Check authentication
-        function checkAuth() {
-            const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-            if (!token) {
+        async function ensureAuthenticated() {
+            const response = await fetch('/api/users/me');
+            if (!response.ok) {
                 window.location.href = 'login.html';
-                return null;
+                return false;
             }
-            return token;
+            return true;
         }
 
         // Load user's stories
         async function loadStories() {
             try {
-                const token = checkAuth();
-                if (!token) return;
+                const isAuthenticated = await ensureAuthenticated();
+                if (!isAuthenticated) return;
 
-                const response = await fetch('/api/stories/mine', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
+                const response = await fetch('/api/stories/mine');
 
                 if (!response.ok) {
                     throw new Error('Failed to load stories');
@@ -382,7 +378,7 @@
                             ${story.isPublished ? 'Published' : 'Draft'}
                         </div>
                         <div class="story-meta">
-                            ${story.chapters.length} chapters • First ${Math.min(story.chapters.length, 2)} free • $${Number(story.price || 0).toFixed(2)}/chapter
+                            ${story.chapters.length} chapters • First ${Math.min(story.chapters.length, 2)} free • ₹1.00/chapter
                         </div>
                         <div class="story-actions">
                             <button class="btn-action btn-publish" onclick="publishStory('${story._id}')" ${story.isPublished ? 'disabled' : ''}>
@@ -465,14 +461,14 @@
             }
 
             try {
-                const token = checkAuth();
-                if (!token) return;
+                const isAuthenticated = await ensureAuthenticated();
+                if (!isAuthenticated) return;
 
                 const formData = new FormData();
                 formData.append('title', document.getElementById('story-title').value);
                 formData.append('description', document.getElementById('story-description').value);
                 formData.append('genre', document.getElementById('story-genre').value);
-                formData.append('price', parseFloat(document.getElementById('story-price').value) || 0);
+                formData.append('price', 1);
                 formData.append('chapters', JSON.stringify(chapters));
 
                 const coverFile = document.getElementById('story-cover').files[0];
@@ -482,9 +478,6 @@
 
                 const response = await fetch('/api/stories', {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    },
                     body: formData
                 });
 
@@ -510,14 +503,11 @@
 
         async function publishStory(storyId) {
             try {
-                const token = checkAuth();
-                if (!token) return;
+                const isAuthenticated = await ensureAuthenticated();
+                if (!isAuthenticated) return;
 
                 const response = await fetch(`/api/stories/${storyId}/publish`, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
+                    method: 'PUT'
                 });
 
                 const data = await response.json();
@@ -538,14 +528,11 @@
             }
 
             try {
-                const token = checkAuth();
-                if (!token) return;
+                const isAuthenticated = await ensureAuthenticated();
+                if (!isAuthenticated) return;
 
                 const response = await fetch(`/api/stories/${storyId}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
+                    method: 'DELETE'
                 });
 
                 const data = await response.json();

@@ -1,0 +1,1777 @@
+diff --git a/config/db.js b/config/db.js
+index 8ba6414..1c74f8a 100644
+--- a/config/db.js
++++ b/config/db.js
+@@ -1,19 +1,15 @@
+-const mongoose = require('mongoose');
+-require('dotenv').config();
++require("dotenv").config();
++const mongoose = require("mongoose");
+ 
+-const connectDB = async () => {
+-    try {
+-        const conn = await mongoose.connect(process.env.MONGODB_URI);
+-        console.log(`MongoDB Connected: ${conn.connection.host}`);
+-        
+-        // Test the connection by trying to list collections
+-        const collections = await conn.connection.db.listCollections().toArray();
+-        console.log('Available collections:', collections.map(c => c.name));
+-        
+-    } catch (error) {
+-        console.error('MongoDB connection error:', error);
+-        process.exit(1);
+-    }
++const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
++if (!mongoUri) {
++    throw new Error('Missing MONGO_URI (or MONGODB_URI) environment variable');
++}
++
++const connectDB = () => {
++    mongoose.connect(mongoUri)
++        .then(() => console.log("Connected to Atlas 🚀"))
++        .catch(err => console.log(err));
+ };
+ 
+ module.exports = connectDB;
+diff --git a/middleware/auth.js b/middleware/auth.js
+index fe350cf..73eb477 100644
+--- a/middleware/auth.js
++++ b/middleware/auth.js
+@@ -1,6 +1,11 @@
+ const jwt = require('jsonwebtoken');
+ const User = require('../models/User');
+ 
++const jwtSecret = process.env.JWT_SECRET;
++if (!jwtSecret) {
++    throw new Error('Missing JWT_SECRET environment variable');
++}
++
+ module.exports = async (req, res, next) => {
+     try {
+         // Get token from Authorization header
+@@ -16,7 +21,7 @@ module.exports = async (req, res, next) => {
+         }
+ 
+         // Verify token
+-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
++        const decoded = jwt.verify(token, jwtSecret);
+         
+         // Find user by ID
+         const user = await User.findById(decoded.userId).select('-password');
+diff --git a/package.json b/package.json
+index 34720f9..bdc4cec 100644
+--- a/package.json
++++ b/package.json
+@@ -13,10 +13,12 @@
+     "cors": "^2.8.5",
+     "dotenv": "^16.3.1",
+     "express": "^4.18.2",
++    "express-rate-limit": "^7.5.1",
+     "express-session": "^1.18.1",
+     "jsonwebtoken": "^9.0.2",
+     "mongoose": "^8.13.2",
+     "multer": "^1.4.5-lts.2",
++    "razorpay": "^2.9.6",
+     "socket.io": "^4.8.1"
+   },
+   "devDependencies": {
+diff --git a/public/js/profile-app.js b/public/js/profile-app.js
+index 4c471d1..c0ef8cb 100644
+--- a/public/js/profile-app.js
++++ b/public/js/profile-app.js
+@@ -31,6 +31,37 @@ if (!window.__pixelScriptProfileAppLoaded) {
+         return role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Writer';
+     }
+ 
++    function escapeHtml(value) {
++        return String(value || '')
++            .replace(/&/g, '&amp;')
++            .replace(/</g, '&lt;')
++            .replace(/>/g, '&gt;')
++            .replace(/"/g, '&quot;')
++            .replace(/'/g, '&#39;');
++    }
++
++    function sanitizeUrl(value) {
++        const url = String(value || '').trim();
++        if (!url) {
++            return '';
++        }
++
++        if (url.startsWith('/')) {
++            return url;
++        }
++
++        try {
++            const parsed = new URL(url, window.location.origin);
++            if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
++                return parsed.href;
++            }
++        } catch (error) {
++            return '';
++        }
++
++        return '';
++    }
++
+     function updateStoredProfile(user) {
+         localStorage.setItem('userProfile', JSON.stringify({
+             name: user.name || 'User',
+@@ -140,23 +171,34 @@ if (!window.__pixelScriptProfileAppLoaded) {
+     }
+ 
+     function createWorkCard(work) {
++        const title = escapeHtml(work.title || 'Untitled');
++        const description = escapeHtml(work.description || '');
++        const safeFileUrl = sanitizeUrl(work.fileUrl);
++        const safeFileType = escapeHtml(work.fileType || 'image');
++        const workId = escapeHtml(work._id || '');
++
+         const media = work.fileType === 'image'
+-            ? `<img src="${work.fileUrl}" alt="${work.title}">`
++            ? `<img src="${safeFileUrl}" alt="${title}">`
+             : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:4rem;color:#3f6d71;"><i class="fas fa-file-alt"></i></div>`;
+ 
+         return `
+-            <div class="work-item" data-work-id="${work._id}">
++            <div class="work-item" data-work-id="${workId}">
+                 ${media}
+                 <div class="work-overlay">
+                     <div class="work-info">
+-                        <h3>${work.title}</h3>
+-                        <p>${work.description || ''}</p>
++                        <h3>${title}</h3>
++                        <p>${description}</p>
+                     </div>
+                     <div class="work-action-buttons">
+-                        <button class="view-btn" onclick="viewWork('${work.fileUrl}', '${work.fileType}')">
++                        <button
++                            class="view-btn"
++                            type="button"
++                            data-work-action="view"
++                            data-work-src="${encodeURIComponent(safeFileUrl)}"
++                            data-work-type="${safeFileType}">
+                             <i class="fas fa-eye"></i>
+                         </button>
+-                        <button class="delete-btn" onclick="deleteWork('${work._id}')">
++                        <button class="delete-btn" type="button" data-work-action="delete" data-work-id="${workId}">
+                             <i class="fas fa-trash"></i>
+                         </button>
+                     </div>
+@@ -234,6 +276,94 @@ if (!window.__pixelScriptProfileAppLoaded) {
+         }
+     }
+ 
++    function escapeHtml(value) {
++        return String(value || '')
++            .replace(/&/g, '&amp;')
++            .replace(/</g, '&lt;')
++            .replace(/>/g, '&gt;')
++            .replace(/"/g, '&quot;')
++            .replace(/'/g, '&#39;');
++    }
++
++    function buildCollaborationHref(collaboration) {
++        if (collaboration.status === 'active') {
++            return `collab.html?room=${encodeURIComponent(collaboration.room)}&collaborationId=${encodeURIComponent(collaboration._id)}${collaboration.currentUserRole === 'artist' ? '&host=1' : ''}`;
++        }
++
++        if (collaboration.publishedStoryId) {
++            return `reader.html?id=${encodeURIComponent(collaboration.publishedStoryId)}`;
++        }
++
++        return '#';
++    }
++
++    function renderCollaborations(collaborations) {
++        const grid = document.getElementById('activeCollaborationsGrid');
++        if (!grid) {
++            return;
++        }
++
++        const activeCollaborations = collaborations.filter(item => item.status === 'active');
++
++        if (!activeCollaborations.length) {
++            grid.innerHTML = '<p>No active collaborations yet.</p>';
++            return;
++        }
++
++        grid.innerHTML = activeCollaborations.map(item => {
++            const partnerName = item.partner?.name || item.partner?.username || 'Collaborator';
++            const title = item.storyTitle || item.title || 'Untitled collaboration';
++            const subtitle = item.status === 'active' ? `with ${partnerName}` : `Published with ${partnerName}`;
++
++            return `
++                <a href="${buildCollaborationHref(item)}" class="collab-item">
++                    <div class="collab-image">
++                        <img src="${escapeHtml(item.coverImage || 'images/default-cover.png')}" alt="${escapeHtml(title)}">
++                    </div>
++                    <div class="collab-info">
++                        <h3>${escapeHtml(title)}</h3>
++                        <p>${escapeHtml(subtitle)}</p>
++                    </div>
++                </a>
++            `;
++        }).join('');
++    }
++
++    async function loadCollaborations() {
++        if (!getToken()) {
++            return;
++        }
++
++        try {
++            const response = await fetch('/api/collab/my-collaborations', {
++                headers: authHeaders()
++            });
++
++            if (!response.ok) {
++                throw new Error('Failed to load collaborations');
++            }
++
++            const collaborations = await response.json();
++            setText('collabsCount', String(collaborations.length));
++            renderCollaborations(collaborations);
++        } catch (error) {
++            console.error('Error loading collaborations:', error);
++            const grid = document.getElementById('activeCollaborationsGrid');
++            if (grid) {
++                grid.innerHTML = '<p>Failed to load collaborations.</p>';
++            }
++        }
++    }
++
++    function handleLogout() {
++        localStorage.removeItem('token');
++        sessionStorage.removeItem('token');
++        localStorage.removeItem('user');
++        sessionStorage.removeItem('user');
++        localStorage.removeItem('userProfile');
++        window.location.href = 'login.html';
++    }
++
+     async function saveProfile() {
+         if (!getToken()) {
+             return;
+@@ -362,16 +492,39 @@ if (!window.__pixelScriptProfileAppLoaded) {
+     }
+ 
+     function viewWork(src, fileType = 'image') {
++        const safeSrc = sanitizeUrl(src);
++        if (!safeSrc) {
++            return;
++        }
++
+         const modal = document.createElement('div');
+         modal.className = 'view-work-modal';
+-        modal.innerHTML = `
+-            <div class="modal-content">
+-                <span class="close-btn">&times;</span>
+-                ${fileType === 'image'
+-                    ? `<img src="${src}" alt="Work Preview" class="work-preview">`
+-                    : `<iframe src="${src}" title="Work Preview" style="width:100%;height:80vh;border:none;"></iframe>`}
+-            </div>
+-        `;
++        const content = document.createElement('div');
++        content.className = 'modal-content';
++
++        const closeButton = document.createElement('span');
++        closeButton.className = 'close-btn';
++        closeButton.textContent = '\u00d7';
++
++        content.appendChild(closeButton);
++
++        if (fileType === 'image') {
++            const image = document.createElement('img');
++            image.src = safeSrc;
++            image.alt = 'Work Preview';
++            image.className = 'work-preview';
++            content.appendChild(image);
++        } else {
++            const frame = document.createElement('iframe');
++            frame.src = safeSrc;
++            frame.title = 'Work Preview';
++            frame.style.width = '100%';
++            frame.style.height = '80vh';
++            frame.style.border = 'none';
++            content.appendChild(frame);
++        }
++
++        modal.appendChild(content);
+         document.body.appendChild(modal);
+ 
+         modal.querySelector('.close-btn').onclick = () => modal.remove();
+@@ -405,6 +558,29 @@ if (!window.__pixelScriptProfileAppLoaded) {
+     }
+ 
+     function bindEvents() {
++        const worksGrid = document.getElementById('worksGrid');
++        if (worksGrid && !worksGrid.dataset.profileAppBound) {
++            worksGrid.addEventListener('click', event => {
++                const trigger = event.target.closest('button[data-work-action]');
++                if (!trigger) {
++                    return;
++                }
++
++                const action = trigger.dataset.workAction;
++                if (action === 'view') {
++                    const src = decodeURIComponent(trigger.dataset.workSrc || '');
++                    const type = trigger.dataset.workType || 'image';
++                    viewWork(src, type);
++                    return;
++                }
++
++                if (action === 'delete') {
++                    deleteWork(trigger.dataset.workId || '');
++                }
++            });
++            worksGrid.dataset.profileAppBound = 'true';
++        }
++
+         const editAboutButton = document.getElementById('edit-about-btn');
+         if (editAboutButton && !editAboutButton.dataset.profileAppBound) {
+             editAboutButton.addEventListener('click', openAboutModal);
+@@ -478,7 +654,7 @@ if (!window.__pixelScriptProfileAppLoaded) {
+         bindEvents();
+         loadProfile();
+         loadWorks();
+-        loadCollaborationCount();
++        loadCollaborations();
+     }
+ 
+     window.openUploadModal = openUploadModal;
+@@ -494,6 +670,7 @@ if (!window.__pixelScriptProfileAppLoaded) {
+     };
+     window.viewWork = viewWork;
+     window.deleteWork = deleteWork;
++    window.handleLogout = handleLogout;
+     window.handleProfilePicChange = function handleProfilePicChange(event) {
+         const file = event.target.files?.[0];
+         if (file) {
+diff --git a/routes/auth.js b/routes/auth.js
+index 76b816c..218c2a7 100644
+--- a/routes/auth.js
++++ b/routes/auth.js
+@@ -1,12 +1,33 @@
+ const router = require('express').Router();
+ const bcrypt = require('bcryptjs');
+ const jwt = require('jsonwebtoken');
++const rateLimit = require('express-rate-limit');
+ const User = require('../models/User');
+ 
++const jwtSecret = process.env.JWT_SECRET;
++if (!jwtSecret) {
++    throw new Error('Missing JWT_SECRET environment variable');
++}
++
++const authLimiter = rateLimit({
++    windowMs: 15 * 60 * 1000,
++    max: 20,
++    standardHeaders: true,
++    legacyHeaders: false,
++    message: { message: 'Too many authentication attempts. Please try again later.' }
++});
++
+ // Register route
+-router.post('/register', async (req, res) => {
++router.post('/register', authLimiter, async (req, res) => {
+     try {
+-        const { username, email, password, role, genres } = req.body;
++        const { username, email, password, name, role, genres } = req.body;
++
++        // Validate required fields
++        if (!username || !email || !password || !name) {
++            return res.status(400).json({
++                message: 'Please provide username, email, password, and name'
++            });
++        }
+ 
+         // Check if user already exists
+         const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+@@ -21,6 +42,7 @@ router.post('/register', async (req, res) => {
+             username,
+             email,
+             password,
++            name,
+             role,
+             genres
+         });
+@@ -39,7 +61,7 @@ router.post('/register', async (req, res) => {
+ });
+ 
+ // Login route
+-router.post('/login', async (req, res) => {
++router.post('/login', authLimiter, async (req, res) => {
+     try {
+         const { email, password } = req.body;
+ 
+@@ -62,7 +84,7 @@ router.post('/login', async (req, res) => {
+         // Generate JWT token
+         const token = jwt.sign(
+             { userId: user._id, role: user.role },
+-            process.env.JWT_SECRET || 'pixelscript_secret_key_2024_secure_token',
++            jwtSecret,
+             { expiresIn: '24h' }
+         );
+ 
+@@ -73,7 +95,7 @@ router.post('/login', async (req, res) => {
+                 username: user.username,
+                 email: user.email,
+                 role: user.role,
+-                profilePic: user.profilePic,
++                profilePicture: user.profilePicture,
+                 genres: user.genres
+             }
+         });
+@@ -95,7 +117,7 @@ router.get('/verify', async (req, res) => {
+             });
+         }
+ 
+-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
++        const decoded = jwt.verify(token, jwtSecret);
+         const user = await User.findById(decoded.userId);
+ 
+         if (!user) {
+diff --git a/routes/collab.js b/routes/collab.js
+index 01bc94c..6ca1bd3 100644
+--- a/routes/collab.js
++++ b/routes/collab.js
+@@ -1,4 +1,6 @@
+ const express = require('express');
++const multer = require('multer');
++
+ const router = express.Router();
+ const Collaboration = require('../models/Collaboration');
+ const User = require('../models/User');
+@@ -6,6 +8,18 @@ const auth = require('../middleware/auth');
+ const Room = require('../models/Room');
+ const Story = require('../models/Story');
+ const Workspace = require('../models/Workspace');
++const { createDiskStorage, buildPublicFileUrl } = require('../services/storage');
++
++const collaborationCoverUpload = multer({
++    storage: createDiskStorage('collaborations'),
++    limits: { fileSize: 10 * 1024 * 1024 },
++    fileFilter(req, file, cb) {
++        if (!file.mimetype.startsWith('image/')) {
++            return cb(new Error('Only image files are allowed for collaboration covers'));
++        }
++        cb(null, true);
++    }
++});
+ 
+ function getPartnerRole(role) {
+     return role === 'artist' ? 'writer' : 'artist';
+@@ -19,6 +33,14 @@ function normalizeChapterNumber(value) {
+     return Math.max(1, Math.floor(parsed));
+ }
+ 
++function parsePositiveInt(value, fallback) {
++    const parsed = Number.parseInt(value, 10);
++    if (!Number.isFinite(parsed) || parsed < 1) {
++        return fallback;
++    }
++    return parsed;
++}
++
+ function normalizeChapterPanels(chapterPanels = [], fallbackCanvas = '', fallbackArtwork = []) {
+     const fromPanels = (chapterPanels || [])
+         .filter(panel => panel && panel.imageUrl)
+@@ -69,6 +91,14 @@ function serializeCollaboration(collaboration, currentUserId) {
+     const publishedStoryId = collaboration.publishRequest?.story?._id
+         ? collaboration.publishRequest.story._id.toString()
+         : (collaboration.publishRequest?.story ? collaboration.publishRequest.story.toString() : null);
++    const publishedChapterNumber = normalizeChapterNumber(collaboration.chapterNumber);
++    const publishedChapterId = Array.isArray(collaboration.publishRequest?.story?.chapters)
++        ? (collaboration.publishRequest.story.chapters.find(chapter => Number(chapter?.order) === publishedChapterNumber)?._id?.toString() || null)
++        : null;
++    const isPublishedLive = collaboration.status === 'completed' && Boolean(publishedStoryId);
++    const fallbackFileCover = (collaboration.files || []).find(file => String(file.type || '').startsWith('image/'))?.url || '';
++    const fallbackPanelCover = (collaboration.chapterPanels || [])[0]?.imageUrl || '';
++    const coverImage = collaboration.coverImage || collaboration.publishRequest?.story?.coverImage || fallbackFileCover || fallbackPanelCover || 'images/default-cover.png';
+ 
+     return {
+         ...collaboration.toObject(),
+@@ -78,10 +108,160 @@ function serializeCollaboration(collaboration, currentUserId) {
+         partner: artistId === currentId ? collaboration.writer : collaboration.artist,
+         publishReady: Boolean(collaboration.storyTitle && collaboration.storyContent),
+         chapterLabel: `Chapter ${normalizeChapterNumber(collaboration.chapterNumber)}`,
+-        publishedStoryId
++        isPublishedLive,
++        publishedStoryId,
++        publishedChapterId,
++        coverImage
+     };
+ }
+ 
++function buildCollaborationTitle(collaboration) {
++    return `${collaboration.storyTitle || collaboration.title} - Chapter ${normalizeChapterNumber(collaboration.chapterNumber)}`;
++}
++
++async function backfillPublishedStoryLinks(collaborations) {
++    const collaborationsToUpdate = [];
++    
++    for (const collab of collaborations) {
++        if (collab.status === 'completed' && !collab.publishRequest?.story) {
++            const linkedStory = await Story.findOne({ sourceCollaboration: collab._id }).lean();
++            if (linkedStory) {
++                collab.publishRequest = collab.publishRequest || {};
++                collab.publishRequest.story = linkedStory._id;
++                collaborationsToUpdate.push(collab);
++            }
++        }
++    }
++    
++    if (collaborationsToUpdate.length) {
++        await Promise.all(
++            collaborationsToUpdate.map(collab =>
++                Collaboration.findByIdAndUpdate(
++                    collab._id,
++                    { 'publishRequest.story': collab.publishRequest.story },
++                    { new: false }
++                )
++            )
++        );
++    }
++    
++    return collaborations;
++}
++
++async function populateCollaboration(collaborationId) {
++    return Collaboration.findById(collaborationId)
++        .populate('artist', 'username name profilePicture role')
++        .populate('writer', 'username name profilePicture role')
++    .populate('publishRequest.story', 'title isPublished coverImage chapters._id chapters.order');
++}
++
++function resetPublishApprovalsForEditing(collaboration) {
++    collaboration.status = 'active';
++    collaboration.publishRequest.artistApproved = false;
++    collaboration.publishRequest.writerApproved = false;
++    collaboration.publishRequest.requestedAt = undefined;
++    collaboration.publishRequest.requestedBy = undefined;
++    collaboration.publishRequest.publishedAt = undefined;
++    collaboration.markModified('publishRequest');
++}
++
++function clearStoryActionRequest(collaboration, status = '') {
++    collaboration.storyActionRequest.type = '';
++    collaboration.storyActionRequest.status = status;
++    collaboration.storyActionRequest.requestedAt = undefined;
++    collaboration.storyActionRequest.requestedBy = undefined;
++    collaboration.storyActionRequest.artistApproved = false;
++    collaboration.storyActionRequest.writerApproved = false;
++    collaboration.storyActionRequest.resolvedAt = status ? new Date() : undefined;
++    collaboration.storyActionRequest.resolvedBy = undefined;
++}
++
++async function shiftChapterNumbersAfterDelete(collaboration) {
++    const deletedChapterNumber = normalizeChapterNumber(collaboration.chapterNumber);
++
++    const collaborationsToShift = await Collaboration.find({
++        _id: { $ne: collaboration._id },
++        writer: collaboration.writer,
++        storyTitle: collaboration.storyTitle,
++        chapterNumber: { $gt: deletedChapterNumber },
++        status: { $in: ['active', 'completed'] }
++    });
++
++    for (const item of collaborationsToShift) {
++        item.chapterNumber = normalizeChapterNumber(item.chapterNumber) - 1;
++        item.title = buildCollaborationTitle(item);
++        await item.save();
++    }
++}
++
++async function executeDeleteChapter(collaboration) {
++    const story = await Story.findById(collaboration.publishRequest.story);
++    if (!story) {
++        throw new Error('Published story not found');
++    }
++
++    const deletedChapterNumber = normalizeChapterNumber(collaboration.chapterNumber);
++    const existingChapterIndex = story.chapters.findIndex(chapter => Number(chapter.order) === deletedChapterNumber);
++
++    if (existingChapterIndex === -1) {
++        throw new Error('Published chapter not found');
++    }
++
++    story.chapters.splice(existingChapterIndex, 1);
++    story.chapters = story.chapters
++        .sort((a, b) => a.order - b.order)
++        .map((chapter, index) => ({
++            ...(chapter.toObject ? chapter.toObject() : chapter),
++            order: index + 1,
++            isFree: index + 1 <= 2
++        }));
++
++    if (story.projectBoard?.panels?.length) {
++        story.projectBoard.panels = [];
++    }
++
++    if (story.chapters.length) {
++        await story.save();
++    } else {
++        await Story.deleteOne({ _id: story._id });
++    }
++
++    await shiftChapterNumbersAfterDelete(collaboration);
++
++    collaboration.status = 'cancelled';
++    collaboration.publishRequest.artistApproved = false;
++    collaboration.publishRequest.writerApproved = false;
++    collaboration.publishRequest.requestedAt = undefined;
++    collaboration.publishRequest.requestedBy = undefined;
++    collaboration.publishRequest.publishedAt = undefined;
++    collaboration.publishRequest.story = undefined;
++}
++
++async function executeEditChapter(collaboration) {
++    if (!collaboration.publishRequest?.story) {
++        throw new Error('Published story not found');
++    }
++
++    resetPublishApprovalsForEditing(collaboration);
++}
++
++async function finalizeStoryActionIfApproved(collaboration) {
++    if (!collaboration.storyActionRequest.artistApproved || !collaboration.storyActionRequest.writerApproved) {
++        return;
++    }
++
++    if (collaboration.storyActionRequest.type === 'delete') {
++        await executeDeleteChapter(collaboration);
++    }
++
++    if (collaboration.storyActionRequest.type === 'edit') {
++        await executeEditChapter(collaboration);
++    }
++
++    collaboration.storyActionRequest.status = 'approved';
++    collaboration.storyActionRequest.resolvedAt = new Date();
++}
++
+ async function ensureCollaborationUsers(collaboration) {
+     await User.updateMany(
+         { _id: { $in: [collaboration.artist, collaboration.writer] } },
+@@ -89,9 +269,12 @@ async function ensureCollaborationUsers(collaboration) {
+     );
+ }
+ 
+-// Discover possible partners from real profiles
+ router.get('/discover', auth, async (req, res) => {
+     try {
++        const page = parsePositiveInt(req.query.page, 1);
++        const limit = Math.min(parsePositiveInt(req.query.limit, 24), 50);
++        const skip = (page - 1) * limit;
++
+         const partnerRole = getPartnerRole(req.user.role);
+         if (!['artist', 'writer'].includes(req.user.role)) {
+             return res.status(403).json({ message: 'Only artists and writers can discover collaborators' });
+@@ -101,6 +284,8 @@ router.get('/discover', auth, async (req, res) => {
+             _id: { $ne: req.user._id },
+             role: partnerRole
+         })
++            .skip(skip)
++            .limit(limit)
+             .select('name username role bio about genres skills profilePicture profileCompletion works')
+             .populate('works');
+ 
+@@ -124,11 +309,10 @@ router.get('/discover', auth, async (req, res) => {
+             }))
+         })));
+     } catch (error) {
+-        res.status(500).json({ message: 'Error discovering collaborators', error: error.message });
++        res.status(500).json({ message: 'Error discovering collaborators' });
+     }
+ });
+ 
+-// Create collaboration request
+ router.post('/', auth, async (req, res) => {
+     try {
+         const { title, description, genre, category, partnerId, storyTitle, storySynopsis, chapterNumber, chapterTitle } = req.body;
+@@ -193,28 +377,34 @@ router.post('/', auth, async (req, res) => {
+ 
+         res.status(201).json(serializeCollaboration(collaboration, req.user._id));
+     } catch (error) {
+-        res.status(500).json({ message: 'Error creating collaboration', error: error.message });
++        res.status(500).json({ message: 'Error creating collaboration' });
+     }
+ });
+ 
+-// Get user's collaborations
+ router.get('/my-collaborations', auth, async (req, res) => {
+     try {
++        const page = parsePositiveInt(req.query.page, 1);
++        const limit = Math.min(parsePositiveInt(req.query.limit, 30), 100);
++        const skip = (page - 1) * limit;
++
+         const collaborations = await Collaboration.find({
+             $or: [{ artist: req.user._id }, { writer: req.user._id }]
+         })
+-        .populate('artist', 'username name profilePicture role')
+-        .populate('writer', 'username name profilePicture role')
+-        .populate('publishRequest.story', 'title isPublished')
+-        .sort('-updatedAt');
++            .populate('artist', 'username name profilePicture role')
++            .populate('writer', 'username name profilePicture role')
++            .populate('publishRequest.story', 'title isPublished coverImage chapters._id chapters.order')
++            .skip(skip)
++            .limit(limit)
++            .sort('-updatedAt');
++
++        await backfillPublishedStoryLinks(collaborations);
+ 
+         res.json(collaborations.map(item => serializeCollaboration(item, req.user._id)));
+     } catch (error) {
+-        res.status(500).json({ message: 'Error fetching collaborations', error: error.message });
++        res.status(500).json({ message: 'Error fetching collaborations' });
+     }
+ });
+ 
+-// Approve or reject request
+ router.put('/:id/respond', auth, async (req, res) => {
+     try {
+         const { action } = req.body;
+@@ -246,38 +436,66 @@ router.put('/:id/respond', auth, async (req, res) => {
+         const populated = await Collaboration.findById(collaboration._id)
+             .populate('artist', 'username name profilePicture role')
+             .populate('writer', 'username name profilePicture role')
+-            .populate('publishRequest.story', 'title isPublished');
++            .populate('publishRequest.story', 'title isPublished coverImage chapters._id chapters.order');
+ 
+         res.json(serializeCollaboration(populated, req.user._id));
+     } catch (error) {
+-        res.status(500).json({ message: 'Error responding to collaboration', error: error.message });
++        res.status(500).json({ message: 'Error responding to collaboration' });
+     }
+ });
+ 
+-// Get collaboration by ID
+-router.get('/:id', auth, async (req, res) => {
++router.post('/:id/cover-image', auth, collaborationCoverUpload.single('coverImage'), async (req, res) => {
+     try {
+         const collaboration = await Collaboration.findById(req.params.id)
+             .populate('artist', 'username name profilePicture role')
+             .populate('writer', 'username name profilePicture role')
+-            .populate('publishRequest.story', 'title isPublished');
++            .populate('publishRequest.story', 'title isPublished coverImage');
++
++        if (!collaboration) {
++            return res.status(404).json({ message: 'Collaboration not found' });
++        }
++
++        if (collaboration.artist._id.toString() !== req.user.id) {
++            return res.status(403).json({ message: 'Only the artist can upload a story cover' });
++        }
++
++        if (!req.file) {
++            return res.status(400).json({ message: 'No cover image uploaded' });
++        }
++
++        collaboration.coverImage = buildPublicFileUrl('collaborations', req.file.filename);
++        await collaboration.save();
++
++        res.json(serializeCollaboration(collaboration, req.user._id));
++    } catch (error) {
++        console.error('Cover upload error:', error);
++        res.status(500).json({ message: 'Failed to upload cover image' });
++    }
++});
++
++router.get('/:id', auth, async (req, res) => {
++    try {
++        let collaboration = await Collaboration.findById(req.params.id)
++            .populate('artist', 'username name profilePicture role')
++            .populate('writer', 'username name profilePicture role')
++            .populate('publishRequest.story', 'title isPublished coverImage');
+ 
+         if (!collaboration) {
+             return res.status(404).json({ message: 'Collaboration not found' });
+         }
+ 
+-        // Check if user is part of the collaboration
+         if (!collaboration.artist.equals(req.user._id) && !collaboration.writer.equals(req.user._id)) {
+             return res.status(403).json({ message: 'Not authorized to view this collaboration' });
+         }
+ 
++        await backfillPublishedStoryLinks([collaboration]);
++
+         res.json(serializeCollaboration(collaboration, req.user._id));
+     } catch (error) {
+-        res.status(500).json({ message: 'Error fetching collaboration', error: error.message });
++        res.status(500).json({ message: 'Error fetching collaboration' });
+     }
+ });
+ 
+-// Update collaboration
+ router.put('/:id', auth, async (req, res) => {
+     try {
+         const updates = Object.keys(req.body);
+@@ -294,7 +512,6 @@ router.put('/:id', auth, async (req, res) => {
+             return res.status(404).json({ message: 'Collaboration not found' });
+         }
+ 
+-        // Check if user is part of the collaboration
+         if (!collaboration.artist.equals(req.user._id) && !collaboration.writer.equals(req.user._id)) {
+             return res.status(403).json({ message: 'Not authorized to update this collaboration' });
+         }
+@@ -310,21 +527,21 @@ router.put('/:id', auth, async (req, res) => {
+             }
+             collaboration[update] = req.body[update];
+         });
++
+         collaboration.title = `${collaboration.storyTitle || collaboration.title} - Chapter ${normalizeChapterNumber(collaboration.chapterNumber)}`;
+         await collaboration.save();
+ 
+         const populated = await Collaboration.findById(collaboration._id)
+             .populate('artist', 'username name profilePicture role')
+             .populate('writer', 'username name profilePicture role')
+-            .populate('publishRequest.story', 'title isPublished');
++            .populate('publishRequest.story', 'title isPublished coverImage');
+ 
+         res.json(serializeCollaboration(populated, req.user._id));
+     } catch (error) {
+-        res.status(500).json({ message: 'Error updating collaboration', error: error.message });
++        res.status(500).json({ message: 'Error updating collaboration' });
+     }
+ });
+ 
+-// Start or approve publish request
+ router.put('/:id/publish-request', auth, async (req, res) => {
+     try {
+         const collaboration = await Collaboration.findById(req.params.id);
+@@ -356,9 +573,9 @@ router.put('/:id/publish-request', auth, async (req, res) => {
+             collaboration.publishRequest.writerApproved = true;
+         }
+ 
+-        if (collaboration.publishRequest.artistApproved && collaboration.publishRequest.writerApproved && !collaboration.publishRequest.story) {
++        if (collaboration.publishRequest.artistApproved && collaboration.publishRequest.writerApproved) {
+             const workspace = await Workspace.findOne({ room: collaboration.room }).lean();
+-            const coverImage = collaboration.files.find(file => String(file.type || '').startsWith('image/'))?.url || 'images/default-cover.png';
++            const coverImage = collaboration.coverImage || collaboration.files.find(file => String(file.type || '').startsWith('image/'))?.url || 'images/default-cover.png';
+             const chapterPanels = normalizeChapterPanels(
+                 collaboration.chapterPanels,
+                 workspace?.canvasState || '',
+@@ -369,15 +586,17 @@ router.put('/:id/publish-request', auth, async (req, res) => {
+                 : 'other';
+             const normalizedChapterNumber = normalizeChapterNumber(collaboration.chapterNumber);
+             const chapterTitle = collaboration.chapterTitle || `Chapter ${normalizedChapterNumber}`;
+-            let story = await Story.findOne({
+-                author: collaboration.writer,
+-                title: collaboration.storyTitle
+-            });
++            let story = collaboration.publishRequest.story
++                ? await Story.findById(collaboration.publishRequest.story)
++                : await Story.findOne({
++                    author: collaboration.writer,
++                    title: collaboration.storyTitle
++                });
+ 
+             if (story) {
+                 story.description = collaboration.storySynopsis || collaboration.description || story.description || '';
+                 story.genre = normalizedGenre;
+-                if (!story.coverImage || story.coverImage === 'images/default-cover.png') {
++                if (collaboration.coverImage || !story.coverImage || story.coverImage === 'images/default-cover.png') {
+                     story.coverImage = coverImage;
+                 }
+ 
+@@ -400,7 +619,7 @@ router.put('/:id/publish-request', auth, async (req, res) => {
+                 }
+ 
+                 story.chapters = story.chapters.sort((a, b) => a.order - b.order).map((chapter, index) => ({
+-                    ...chapter.toObject ? chapter.toObject() : chapter,
++                    ...(chapter.toObject ? chapter.toObject() : chapter),
+                     isFree: chapter.order <= 2,
+                     order: chapter.order || index + 1
+                 }));
+@@ -455,22 +674,117 @@ router.put('/:id/publish-request', auth, async (req, res) => {
+             collaboration.publishRequest.story = story._id;
+             collaboration.publishRequest.publishedAt = new Date();
+             collaboration.status = 'completed';
++            clearStoryActionRequest(collaboration);
+         }
+ 
+         await collaboration.save();
+ 
+-        const populated = await Collaboration.findById(collaboration._id)
+-            .populate('artist', 'username name profilePicture role')
+-            .populate('writer', 'username name profilePicture role')
+-            .populate('publishRequest.story', 'title isPublished');
++        const populated = await populateCollaboration(collaboration._id);
++
++        res.json(serializeCollaboration(populated, req.user._id));
++    } catch (error) {
++        res.status(500).json({ message: 'Error processing publish request' });
++    }
++});
++
++router.post('/:id/story-action-request', auth, async (req, res) => {
++    try {
++        const { type } = req.body;
++        const collaboration = await Collaboration.findById(req.params.id);
++
++        if (!collaboration) {
++            return res.status(404).json({ message: 'Collaboration not found' });
++        }
++
++        const isParticipant = collaboration.artist.toString() === req.user.id || collaboration.writer.toString() === req.user.id;
++        if (!isParticipant) {
++            return res.status(403).json({ message: 'Not authorized' });
++        }
++
++        if (!['edit', 'delete'].includes(type)) {
++            return res.status(400).json({ message: 'Invalid story action type' });
++        }
++
++        if (!collaboration.publishRequest?.story) {
++            return res.status(400).json({ message: 'Only published chapters can be edited or deleted through requests' });
++        }
++
++        if (collaboration.storyActionRequest?.status === 'pending') {
++            return res.status(400).json({ message: 'There is already a pending edit/delete request for this chapter' });
++        }
++
++        collaboration.storyActionRequest.type = type;
++        collaboration.storyActionRequest.status = 'pending';
++        collaboration.storyActionRequest.requestedAt = new Date();
++        collaboration.storyActionRequest.requestedBy = req.user._id;
++        collaboration.storyActionRequest.artistApproved = collaboration.artist.toString() === req.user.id;
++        collaboration.storyActionRequest.writerApproved = collaboration.writer.toString() === req.user.id;
++        collaboration.storyActionRequest.resolvedAt = undefined;
++        collaboration.storyActionRequest.resolvedBy = undefined;
++        await collaboration.save();
++
++        const populated = await populateCollaboration(collaboration._id);
+ 
+         res.json(serializeCollaboration(populated, req.user._id));
+     } catch (error) {
+-        res.status(500).json({ message: 'Error processing publish request', error: error.message });
++        console.error('Story action request error:', error);
++        res.status(500).json({ message: 'Error creating story action request' });
++    }
++});
++
++router.put('/:id/story-action-request', auth, async (req, res) => {
++    try {
++        const { action } = req.body;
++        const collaboration = await Collaboration.findById(req.params.id);
++
++        if (!collaboration) {
++            return res.status(404).json({ message: 'Collaboration not found' });
++        }
++
++        const isParticipant = collaboration.artist.toString() === req.user.id || collaboration.writer.toString() === req.user.id;
++        if (!isParticipant) {
++            return res.status(403).json({ message: 'Not authorized' });
++        }
++
++        if (collaboration.storyActionRequest?.status !== 'pending' || !collaboration.storyActionRequest?.type) {
++            return res.status(400).json({ message: 'There is no pending story action request to respond to' });
++        }
++
++        if (collaboration.storyActionRequest.requestedBy?.toString() === req.user.id) {
++            return res.status(400).json({ message: 'Requester cannot approve or reject their own request' });
++        }
++
++        if (!['approve', 'reject'].includes(action)) {
++            return res.status(400).json({ message: 'Invalid action' });
++        }
++
++        if (action === 'reject') {
++            collaboration.storyActionRequest.status = 'rejected';
++            collaboration.storyActionRequest.resolvedAt = new Date();
++            collaboration.storyActionRequest.resolvedBy = req.user._id;
++            await collaboration.save();
++        } else {
++            if (collaboration.artist.toString() === req.user.id) {
++                collaboration.storyActionRequest.artistApproved = true;
++            }
++
++            if (collaboration.writer.toString() === req.user.id) {
++                collaboration.storyActionRequest.writerApproved = true;
++            }
++
++            await finalizeStoryActionIfApproved(collaboration);
++            await collaboration.save();
++        }
++
++        const populated = await populateCollaboration(collaboration._id);
++
++        res.json(serializeCollaboration(populated, req.user._id));
++    } catch (error) {
++        console.error('Story action response error:', error);
++        res.status(500).json({ message: 'Error responding to story action request' });
+     }
+ });
+ 
+-// Rate collaboration
+ router.post('/:id/rate', auth, async (req, res) => {
+     try {
+         const { rating } = req.body;
+@@ -480,12 +794,10 @@ router.post('/:id/rate', auth, async (req, res) => {
+             return res.status(404).json({ message: 'Collaboration not found' });
+         }
+ 
+-        // Check if user is part of the collaboration
+         if (!collaboration.artist.equals(req.user._id) && !collaboration.writer.equals(req.user._id)) {
+             return res.status(403).json({ message: 'Not authorized to rate this collaboration' });
+         }
+ 
+-        // Update rating based on user role
+         if (req.user.role === 'artist') {
+             collaboration.rating.writer = {
+                 ...(collaboration.rating.writer || {}),
+@@ -500,7 +812,6 @@ router.post('/:id/rate', auth, async (req, res) => {
+ 
+         await collaboration.save();
+ 
+-        // Update user ratings
+         const partnerId = req.user.role === 'artist' ? collaboration.writer : collaboration.artist;
+         const partner = await User.findById(partnerId);
+         if (partner) {
+@@ -509,16 +820,20 @@ router.post('/:id/rate', auth, async (req, res) => {
+ 
+         res.json(collaboration);
+     } catch (error) {
+-        res.status(500).json({ message: 'Error rating collaboration', error: error.message });
++        res.status(500).json({ message: 'Error rating collaboration' });
+     }
+ });
+ 
+-// Create a new collaboration room
+-router.post('/create', async (req, res) => {
++router.post('/create', auth, async (req, res) => {
+     try {
++        const roomName = String(req.body.name || '').trim();
++        if (!roomName) {
++            return res.status(400).json({ error: 'Room name is required' });
++        }
++
+         const room = new Room({
+-            name: req.body.name,
+-            createdBy: req.body.userId
++            name: roomName,
++            createdBy: req.user._id
+         });
+         await room.save();
+         res.json({ roomId: room._id });
+@@ -527,27 +842,32 @@ router.post('/create', async (req, res) => {
+     }
+ });
+ 
+-// Join a collaboration room
+-router.get('/join/:roomId', async (req, res) => {
++router.get('/join/:roomId', auth, async (req, res) => {
+     try {
+         const room = await Room.findById(req.params.roomId);
+         if (!room) {
+             return res.status(404).json({ error: 'Room not found' });
+         }
++
++        const requesterId = String(req.user._id || req.user.id || req.user.userId || '');
++        if (String(room.createdBy) !== requesterId && req.user.role !== 'admin') {
++            return res.status(403).json({ error: 'Not authorized to access this room' });
++        }
++
+         res.json(room);
+     } catch (error) {
+         res.status(500).json({ error: 'Failed to join room' });
+     }
+ });
+ 
+-// Get all rooms
+-router.get('/rooms', async (req, res) => {
++router.get('/rooms', auth, async (req, res) => {
+     try {
+-        const rooms = await Room.find();
++        const query = req.user.role === 'admin' ? {} : { createdBy: req.user._id };
++        const rooms = await Room.find(query).sort({ createdAt: -1 }).limit(100);
+         res.json(rooms);
+     } catch (error) {
+         res.status(500).json({ error: 'Failed to fetch rooms' });
+     }
+ });
+ 
+-module.exports = router; 
++module.exports = router;
+diff --git a/routes/contact.js b/routes/contact.js
+index 257bc61..618af5c 100644
+--- a/routes/contact.js
++++ b/routes/contact.js
+@@ -1,5 +1,13 @@
+ const router = require('express').Router();
+ const Contact = require('../models/Contact');
++const auth = require('../middleware/auth');
++
++function requireAdmin(req, res, next) {
++    if (!req.user || req.user.role !== 'admin') {
++        return res.status(403).json({ message: 'Admin access required' });
++    }
++    return next();
++}
+ 
+ function getTransporter() {
+     if (!process.env.EMAIL_SERVICE || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+@@ -82,7 +90,7 @@ router.post('/', async (req, res) => {
+ });
+ 
+ // Get all contact submissions (admin only)
+-router.get('/', async (req, res) => {
++router.get('/', auth, requireAdmin, async (req, res) => {
+     try {
+         const contacts = await Contact.find()
+             .sort({ createdAt: -1 });
+@@ -95,7 +103,7 @@ router.get('/', async (req, res) => {
+ });
+ 
+ // Update contact status (admin only)
+-router.put('/:id', async (req, res) => {
++router.put('/:id', auth, requireAdmin, async (req, res) => {
+     try {
+         const { status } = req.body;
+         const contact = await Contact.findByIdAndUpdate(
+diff --git a/routes/story.js b/routes/story.js
+index 4a7e58f..6e20909 100644
+--- a/routes/story.js
++++ b/routes/story.js
+@@ -20,6 +20,14 @@ const coverUpload = multer({
+     }
+ });
+ 
++function parsePositiveInt(value, fallback) {
++    const parsed = Number.parseInt(value, 10);
++    if (!Number.isFinite(parsed) || parsed < 1) {
++        return fallback;
++    }
++    return parsed;
++}
++
+ function parseChapters(value) {
+     if (!value) {
+         return [];
+@@ -98,6 +106,17 @@ function normalizeProjectPanels(panels = [], fallbackCanvas = '', fallbackArtwor
+     return fallbackPanels;
+ }
+ 
++function buildCreatedBy(story) {
++    const artistName = story.sourceCollaboration?.artist?.name || story.sourceCollaboration?.artist?.username;
++    const writerName = story.sourceCollaboration?.writer?.name || story.sourceCollaboration?.writer?.username || story.author?.name || story.author?.username;
++
++    if (artistName && writerName) {
++        return `${artistName} and ${writerName}`;
++    }
++
++    return writerName || artistName || story.author?.name || story.author?.username || 'Unknown creator';
++}
++
+ function mapPreviewStory(story) {
+     const projectPanels = normalizeProjectPanels(
+         story.projectBoard?.panels || [],
+@@ -114,6 +133,7 @@ function mapPreviewStory(story) {
+         price: story.price,
+         createdAt: story.createdAt,
+         author: story.author,
++        createdBy: buildCreatedBy(story),
+         chapterCount: story.chapters.length,
+         freeChapterCount: Math.min(story.chapters.length, 2),
+         previewImage: story.chapters?.[0]?.panels?.[0]?.imageUrl || projectPanels[0]?.imageUrl || story.coverImage,
+@@ -127,10 +147,11 @@ function mapPreviewStory(story) {
+     };
+ }
+ 
+-function buildStoryResponse(story, purchases = [], currentUserId = null) {
++function buildStoryResponse(story, purchases = [], currentUserId = null, currentUserRole = null) {
+     const storyData = typeof story.toObject === 'function' ? story.toObject() : story;
+     const authorId = story.author?._id ? story.author._id.toString() : story.author.toString();
+     const isAuthor = currentUserId ? authorId === currentUserId.toString() : false;
++    const isCreator = currentUserRole && ['artist', 'writer', 'editor'].includes(currentUserRole);
+     const hasFullStoryPurchase = purchases.some(purchase => purchase.purchaseType === 'full_story');
+     const purchasedChapterIds = purchases
+         .map(purchase => purchase.chapter ? purchase.chapter.toString() : null)
+@@ -139,7 +160,7 @@ function buildStoryResponse(story, purchases = [], currentUserId = null) {
+     const chapters = storyData.chapters.map(chapter => {
+         const chapterId = chapter._id.toString();
+         const isFree = chapter.order <= 2;
+-        const hasAccess = isAuthor || hasFullStoryPurchase || isFree || purchasedChapterIds.includes(chapterId);
++        const hasAccess = isAuthor || isCreator || hasFullStoryPurchase || isFree || purchasedChapterIds.includes(chapterId);
+ 
+         return {
+             _id: chapter._id,
+@@ -154,6 +175,7 @@ function buildStoryResponse(story, purchases = [], currentUserId = null) {
+ 
+     return {
+         ...storyData,
++        createdBy: buildCreatedBy(storyData),
+         chapters,
+         isAuthor,
+         hasFullStoryPurchase,
+@@ -239,8 +261,21 @@ async function enrichStoryProjectBoard(storyDocument) {
+ 
+ router.get('/published', async (req, res) => {
+     try {
++        const page = parsePositiveInt(req.query.page, 1);
++        const limit = Math.min(parsePositiveInt(req.query.limit, 24), 60);
++        const skip = (page - 1) * limit;
++
+         const stories = await Story.find({ isPublished: true })
+             .populate('author', 'name username profilePicture')
++            .populate({
++                path: 'sourceCollaboration',
++                populate: [
++                    { path: 'artist', select: 'name username profilePicture' },
++                    { path: 'writer', select: 'name username profilePicture' }
++                ]
++            })
++            .skip(skip)
++            .limit(limit)
+             .sort({ createdAt: -1 });
+ 
+         res.json(stories.map(mapPreviewStory));
+@@ -263,7 +298,14 @@ router.get('/mine', auth, async (req, res) => {
+ router.get('/public/:id', async (req, res) => {
+     try {
+         let story = await Story.findOne({ _id: req.params.id, isPublished: true })
+-            .populate('author', 'name username profilePicture');
++            .populate('author', 'name username profilePicture')
++            .populate({
++                path: 'sourceCollaboration',
++                populate: [
++                    { path: 'artist', select: 'name username profilePicture' },
++                    { path: 'writer', select: 'name username profilePicture' }
++                ]
++            });
+ 
+         if (!story) {
+             return res.status(404).json({ error: 'Story not found' });
+@@ -280,7 +322,14 @@ router.get('/public/:id', async (req, res) => {
+ router.get('/:id', auth, async (req, res) => {
+     try {
+         let story = await Story.findById(req.params.id)
+-            .populate('author', 'name username profilePicture');
++            .populate('author', 'name username profilePicture')
++            .populate({
++                path: 'sourceCollaboration',
++                populate: [
++                    { path: 'artist', select: 'name username profilePicture' },
++                    { path: 'writer', select: 'name username profilePicture' }
++                ]
++            });
+ 
+         if (!story) {
+             return res.status(404).json({ error: 'Story not found' });
+@@ -292,7 +341,7 @@ router.get('/:id', auth, async (req, res) => {
+         });
+ 
+         story = await enrichStoryProjectBoard(story);
+-        res.json(buildStoryResponse(story, purchases, req.user.id));
++        res.json(buildStoryResponse(story, purchases, req.user.id, req.user.role));
+     } catch (error) {
+         console.error('Error fetching story:', error);
+         res.status(500).json({ error: 'Server error' });
+@@ -321,7 +370,7 @@ router.post('/', auth, coverUpload.single('coverImage'), async (req, res) => {
+         res.status(201).json(story);
+     } catch (error) {
+         console.error('Error creating story:', error);
+-        res.status(500).json({ error: error.message || 'Server error' });
++        res.status(500).json({ error: 'Server error' });
+     }
+ });
+ 
+diff --git a/routes/user.js b/routes/user.js
+index f30ed09..e97a324 100644
+--- a/routes/user.js
++++ b/routes/user.js
+@@ -6,11 +6,25 @@ const Work = require('../models/Work');
+ const Collaboration = require('../models/Collaboration');
+ const auth = require('../middleware/auth');
+ const multer = require('multer');
++const rateLimit = require('express-rate-limit');
+ const path = require('path');
+ const fs = require('fs');
+ const fsPromises = require('fs').promises;
+ const { createDiskStorage } = require('../services/storage');
+ 
++const jwtSecret = process.env.JWT_SECRET;
++if (!jwtSecret) {
++    throw new Error('Missing JWT_SECRET environment variable');
++}
++
++const authLimiter = rateLimit({
++    windowMs: 15 * 60 * 1000,
++    max: 20,
++    standardHeaders: true,
++    legacyHeaders: false,
++    message: { message: 'Too many authentication attempts. Please try again later.' }
++});
++
+ const MAX_FILE_SIZE = 10 * 1024 * 1024;
+ const allowedDocumentTypes = [
+     'image/jpeg',
+@@ -106,7 +120,7 @@ function sanitizeWork(work) {
+ }
+ 
+ // Login user
+-router.post('/login', async (req, res) => {
++router.post('/login', authLimiter, async (req, res) => {
+     try {
+         const { email, password } = req.body;
+ 
+@@ -137,7 +151,7 @@ router.post('/login', async (req, res) => {
+ 
+         const token = jwt.sign(
+             { userId: user._id, role: user.role },
+-            process.env.JWT_SECRET || 'your-secret-key',
++            jwtSecret,
+             { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+         );
+ 
+@@ -157,7 +171,7 @@ router.post('/login', async (req, res) => {
+ });
+ 
+ // Register new user
+-router.post('/register', async (req, res) => {
++router.post('/register', authLimiter, async (req, res) => {
+     try {
+         const { username, email, password, name, role } = req.body;
+ 
+diff --git a/routes/workspace.js b/routes/workspace.js
+index 2f1fc1f..b9b65e3 100644
+--- a/routes/workspace.js
++++ b/routes/workspace.js
+@@ -1,6 +1,8 @@
+ const express = require('express');
+ const multer = require('multer');
+ const Workspace = require('../models/Workspace');
++const Collaboration = require('../models/Collaboration');
++const auth = require('../middleware/auth');
+ const { createDiskStorage, buildPublicFileUrl } = require('../services/storage');
+ 
+ const router = express.Router();
+@@ -19,8 +21,33 @@ async function findOrCreateWorkspace(room) {
+     return workspace;
+ }
+ 
+-router.get('/:room', async (req, res) => {
++async function canAccessRoom(user, room) {
++    if (!user || !room) {
++        return false;
++    }
++
++    if (user.role === 'admin') {
++        return true;
++    }
++
++    const collaboration = await Collaboration.findOne({ room })
++        .select('artist writer')
++        .lean();
++
++    if (!collaboration) {
++        return false;
++    }
++
++    const userId = String(user._id || user.id || user.userId || '');
++    return String(collaboration.artist) === userId || String(collaboration.writer) === userId;
++}
++
++router.get('/:room', auth, async (req, res) => {
+     try {
++        if (!(await canAccessRoom(req.user, req.params.room))) {
++            return res.status(403).json({ error: 'Not authorized for this workspace' });
++        }
++
+         const workspace = await Workspace.findOne({ room: req.params.room }).lean();
+ 
+         res.json(workspace || {
+@@ -35,8 +62,12 @@ router.get('/:room', async (req, res) => {
+     }
+ });
+ 
+-router.put('/:room', async (req, res) => {
++router.put('/:room', auth, async (req, res) => {
+     try {
++        if (!(await canAccessRoom(req.user, req.params.room))) {
++            return res.status(403).json({ error: 'Not authorized for this workspace' });
++        }
++
+         const workspace = await findOrCreateWorkspace(req.params.room);
+ 
+         if (typeof req.body.canvasState === 'string') {
+@@ -45,11 +76,19 @@ router.put('/:room', async (req, res) => {
+ 
+         if (Array.isArray(req.body.chat)) {
+             workspace.chat = req.body.chat
+-                .filter(item => item && item.message)
++                .filter(item => item && (item.message || item.attachment?.url))
+                 .slice(-100)
+                 .map(item => ({
+                     sender: item.sender || 'Collaborator',
+-                    message: String(item.message).trim(),
++                    message: String(item.message || '').trim(),
++                    attachment: item.attachment?.url
++                        ? {
++                            name: String(item.attachment.name || '').trim(),
++                            url: String(item.attachment.url || '').trim(),
++                            type: String(item.attachment.type || 'application/octet-stream').trim(),
++                            size: Number(item.attachment.size) || 0
++                        }
++                        : undefined,
+                     sentAt: item.sentAt ? new Date(item.sentAt) : new Date()
+                 }));
+         }
+@@ -62,8 +101,12 @@ router.put('/:room', async (req, res) => {
+     }
+ });
+ 
+-router.post('/:room/assets', workspaceUpload.single('file'), async (req, res) => {
++router.post('/:room/assets', auth, workspaceUpload.single('file'), async (req, res) => {
+     try {
++        if (!(await canAccessRoom(req.user, req.params.room))) {
++            return res.status(403).json({ error: 'Not authorized for this workspace' });
++        }
++
+         if (!req.file) {
+             return res.status(400).json({ error: 'No file uploaded' });
+         }
+diff --git a/server.js b/server.js
+index 896c8bf..4e01386 100644
+--- a/server.js
++++ b/server.js
+@@ -5,7 +5,6 @@ const cors = require('cors');
+ const path = require('path');
+ const http = require('http');
+ const socketIo = require('socket.io');
+-const fs = require('fs');
+ const session = require('express-session');
+ const MongoStore = require('connect-mongo');
+ const connectDB = require('./config/db');
+@@ -17,15 +16,43 @@ const storyRoutes = require('./routes/story');
+ const purchaseRoutes = require('./routes/purchase');
+ const contactRoutes = require('./routes/contact');
+ const workspaceRoutes = require('./routes/workspace');
++const aiRoutes = require('./routes/ai');
+ 
+ // Import middleware
+ const errorHandler = require('./middleware/error');
+ 
+ const app = express();
+ const server = http.createServer(app);
++const sessionSecret = process.env.SESSION_SECRET;
++const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
++const publicRoot = path.resolve(__dirname, 'public');
++const socketAllowedOrigins = (process.env.SOCKET_CORS_ORIGIN || process.env.CORS_ORIGIN || 'http://localhost:3000')
++    .split(',')
++    .map(origin => origin.trim())
++    .filter(Boolean);
++const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
++const ROOM_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
++
++if (!sessionSecret) {
++    throw new Error('Missing SESSION_SECRET environment variable');
++}
++
++if (!mongoUri) {
++    throw new Error('Missing MONGO_URI (or MONGODB_URI) environment variable');
++}
++
++function resolveSafePublicPath(requestPath = '') {
++    const normalized = path.posix.normalize(`/${String(requestPath || '')}`).replace(/^\/+/, '');
++    const resolved = path.resolve(publicRoot, normalized);
++    if (resolved === publicRoot || resolved.startsWith(`${publicRoot}${path.sep}`)) {
++        return resolved;
++    }
++    return null;
++}
++
+ const io = socketIo(server, {
+     cors: {
+-        origin: "*",
++        origin: socketAllowedOrigins,
+         methods: ["GET", "POST"]
+     }
+ });
+@@ -48,11 +75,11 @@ app.use(express.static(path.join(__dirname, 'public')));
+ 
+ // Add session middleware
+ app.use(session({
+-    secret: process.env.SESSION_SECRET || 'your-secret-key',
++    secret: sessionSecret,
+     resave: false,
+     saveUninitialized: false,
+     store: MongoStore.create({
+-        mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/pixelscript',
++        mongoUrl: mongoUri,
+         ttl: 24 * 60 * 60 // 1 day
+     }),
+     cookie: {
+@@ -70,39 +97,60 @@ app.use('/api/stories', storyRoutes);
+ app.use('/api/purchases', purchaseRoutes);
+ app.use('/api/contact', contactRoutes);
+ app.use('/api/workspaces', workspaceRoutes);
++app.use('/api/ai', aiRoutes);
+ 
+ // Public routes that don't require authentication
+ app.get('/collaborations/:page', (req, res) => {
+-    const filePath = path.join(__dirname, 'public/collaborations', req.params.page);
+-    if (fs.existsSync(filePath)) {
+-        res.sendFile(filePath);
+-    } else {
+-        res.redirect('/login.html');
++    const safePath = resolveSafePublicPath(`collaborations/${req.params.page}`);
++    if (!safePath) {
++        return res.status(400).send('Invalid path');
+     }
++
++    return res.sendFile(safePath, error => {
++        if (error) {
++            return res.redirect('/login.html');
++        }
++    });
+ });
+ 
+ // Handle all other routes by serving the appropriate HTML file
+ app.get('*', (req, res) => {
+-    const filePath = path.join(__dirname, 'public', req.path);
+-    if (fs.existsSync(filePath)) {
+-        if (req.path.startsWith('/collaborations/')) {
+-            // For collaboration pages, check if user is authenticated
+-            if (req.session && req.session.userId) {
+-                res.sendFile(filePath);
+-            } else {
+-                res.redirect('/login.html');
+-            }
+-        } else {
+-            res.sendFile(filePath);
+-        }
+-    } else {
+-        res.sendFile(path.join(__dirname, 'public', 'index.html'));
++    const safePath = resolveSafePublicPath(req.path);
++    const indexPath = path.join(publicRoot, 'index.html');
++
++    if (!safePath) {
++        return res.status(400).send('Invalid path');
++    }
++
++    if (req.path.startsWith('/collaborations/') && !(req.session && req.session.userId)) {
++        return res.redirect('/login.html');
+     }
++
++    return res.sendFile(safePath, error => {
++        if (error) {
++            return res.sendFile(indexPath);
++        }
++    });
+ });
+ 
+ // Store active collaborations
+ const activeCollaborations = new Map();
+ 
++function touchCollaboration(collaboration) {
++    if (collaboration) {
++        collaboration.lastActivity = Date.now();
++    }
++}
++
++setInterval(() => {
++    const cutoff = Date.now() - ROOM_TTL_MS;
++    activeCollaborations.forEach((collaboration, room) => {
++        if ((collaboration.lastActivity || 0) < cutoff) {
++            activeCollaborations.delete(room);
++        }
++    });
++}, ROOM_CLEANUP_INTERVAL_MS);
++
+ // Socket.IO connection handling
+ io.on('connection', (socket) => {
+     console.log('New client connected:', socket.id);
+@@ -115,16 +163,15 @@ io.on('connection', (socket) => {
+                 users: new Map(), // Changed to Map to store user type
+                 canvasState: null,
+                 chat: [],
+-                primaryUser: isPrimaryUser ? socket.id : null
++                primaryUser: isPrimaryUser ? socket.id : null,
++                lastActivity: Date.now()
+             });
+         }
+         const collab = activeCollaborations.get(room);
+-        
+-        // Always ensure the room has a primary user. Prefer the claimed host,
+-        // but fall back to the first user who joins if needed.
+-        if (!collab.primaryUser) {
+-            collab.primaryUser = socket.id;
+-        } else if (isPrimaryUser) {
++        touchCollaboration(collab);
++
++        // Only a client that explicitly joins as primary can become the drawer.
++        if (isPrimaryUser) {
+             collab.primaryUser = socket.id;
+         }
+         
+@@ -146,14 +193,28 @@ io.on('connection', (socket) => {
+     });
+ 
+     // Handle chat messages
+-    socket.on('chatMessage', ({ room, message, sender }) => {
+-        socket.to(room).emit('chatMessage', { message, sender });
++    socket.on('chatMessage', payload => {
++        const room = payload?.room;
++        if (!room || !activeCollaborations.has(room)) {
++            return;
++        }
++
++        const collab = activeCollaborations.get(room);
++        touchCollaboration(collab);
++
++        socket.to(room).emit('chatMessage', {
++            message: String(payload?.message || ''),
++            sender: String(payload?.sender || 'Collaborator'),
++            sentAt: payload?.sentAt || new Date().toISOString(),
++            attachment: payload?.attachment || null
++        });
+     });
+ 
+     // Handle drawing events - only allow from primary user
+     socket.on('draw', (data) => {
+         const collab = activeCollaborations.get(data.room);
+         if (collab && socket.id === collab.primaryUser) {
++            touchCollaboration(collab);
+             socket.to(data.room).emit('draw', data);
+         }
+     });
+@@ -162,6 +223,7 @@ io.on('connection', (socket) => {
+     socket.on('canvasState', (data) => {
+         const collab = activeCollaborations.get(data.room);
+         if (collab && socket.id === collab.primaryUser) {
++            touchCollaboration(collab);
+             collab.canvasState = data.state;
+             socket.to(data.room).emit('canvasState', data.state);
+         }
+@@ -171,7 +233,11 @@ io.on('connection', (socket) => {
+     socket.on('clear', (data) => {
+         const collab = activeCollaborations.get(data.room);
+         if (collab && socket.id === collab.primaryUser) {
+-            socket.to(data.room).emit('clear');
++            touchCollaboration(collab);
++            if (typeof data.state === 'string') {
++                collab.canvasState = data.state;
++            }
++            socket.to(data.room).emit('clear', { state: data.state || '' });
+         }
+     });
+ 
+@@ -179,14 +245,22 @@ io.on('connection', (socket) => {
+     socket.on('undo', (data) => {
+         const collab = activeCollaborations.get(data.room);
+         if (collab && socket.id === collab.primaryUser) {
+-            socket.to(data.room).emit('undo');
++            touchCollaboration(collab);
++            if (typeof data.state === 'string') {
++                collab.canvasState = data.state;
++            }
++            socket.to(data.room).emit('undo', { state: data.state || '' });
+         }
+     });
+ 
+     socket.on('redo', (data) => {
+         const collab = activeCollaborations.get(data.room);
+         if (collab && socket.id === collab.primaryUser) {
+-            socket.to(data.room).emit('redo');
++            touchCollaboration(collab);
++            if (typeof data.state === 'string') {
++                collab.canvasState = data.state;
++            }
++            socket.to(data.room).emit('redo', { state: data.state || '' });
+         }
+     });
+ 
+diff --git a/socket.js b/socket.js
+deleted file mode 100644
+index 99d2d06..0000000
+--- a/socket.js
++++ /dev/null
+@@ -1,84 +0,0 @@
+-const socketIO = require('socket.io');
+-
+-function initializeSocket(server) {
+-    const io = socketIO(server);
+-    const rooms = new Map(); // Store room data
+-
+-    io.on('connection', (socket) => {
+-        console.log('New client connected');
+-
+-        // Handle joining a room
+-        socket.on('join-room', (roomId) => {
+-            socket.join(roomId);
+-            console.log(`User joined room: ${roomId}`);
+-
+-            // Initialize room if it doesn't exist
+-            if (!rooms.has(roomId)) {
+-                rooms.set(roomId, {
+-                    users: new Set(),
+-                    canvasData: null
+-                });
+-            }
+-            rooms.get(roomId).users.add(socket.id);
+-
+-            // Notify others in the room
+-            socket.to(roomId).emit('user-joined', { userId: socket.id });
+-        });
+-
+-        // Handle drawing events
+-        socket.on('draw-start', (data) => {
+-            socket.to(data.roomId).emit('draw-start', data);
+-        });
+-
+-        socket.on('draw', (data) => {
+-            socket.to(data.roomId).emit('draw', data);
+-        });
+-
+-        socket.on('draw-end', (data) => {
+-            socket.to(data.roomId).emit('draw-end', data);
+-        });
+-
+-        socket.on('draw-shape', (data) => {
+-            socket.to(data.roomId).emit('draw-shape', data);
+-        });
+-
+-        // Handle tool changes
+-        socket.on('tool-change', (data) => {
+-            socket.to(data.roomId).emit('tool-change', data);
+-        });
+-
+-        socket.on('color-change', (data) => {
+-            socket.to(data.roomId).emit('color-change', data);
+-        });
+-
+-        socket.on('size-change', (data) => {
+-            socket.to(data.roomId).emit('size-change', data);
+-        });
+-
+-        // Handle chat messages
+-        socket.on('chat-message', (data) => {
+-            socket.to(data.roomId).emit('chat-message', data);
+-        });
+-
+-        // Handle disconnection
+-        socket.on('disconnect', () => {
+-            console.log('Client disconnected');
+-            // Remove user from all rooms
+-            rooms.forEach((room, roomId) => {
+-                if (room.users.has(socket.id)) {
+-                    room.users.delete(socket.id);
+-                    socket.to(roomId).emit('user-left', { userId: socket.id });
+-                    
+-                    // Clean up empty rooms
+-                    if (room.users.size === 0) {
+-                        rooms.delete(roomId);
+-                    }
+-                }
+-            });
+-        });
+-    });
+-
+-    return io;
+-}
+-
+-module.exports = initializeSocket; 
+\ No newline at end of file

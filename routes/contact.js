@@ -1,5 +1,13 @@
 const router = require('express').Router();
 const Contact = require('../models/Contact');
+const auth = require('../middleware/auth');
+
+function requireAdmin(req, res, next) {
+    if (!req.user || req.user.role !== 'admin') {
+        return res.status(403).json({ message: 'Admin access required' });
+    }
+    return next();
+}
 
 function getTransporter() {
     if (!process.env.EMAIL_SERVICE || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
@@ -82,7 +90,7 @@ router.post('/', async (req, res) => {
 });
 
 // Get all contact submissions (admin only)
-router.get('/', async (req, res) => {
+router.get('/', auth, requireAdmin, async (req, res) => {
     try {
         const contacts = await Contact.find()
             .sort({ createdAt: -1 });
@@ -95,7 +103,7 @@ router.get('/', async (req, res) => {
 });
 
 // Update contact status (admin only)
-router.put('/:id', async (req, res) => {
+router.put('/:id', auth, requireAdmin, async (req, res) => {
     try {
         const { status } = req.body;
         const contact = await Contact.findByIdAndUpdate(

@@ -284,18 +284,41 @@
         </div>
     </div>
 
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <script>
+        const CHAPTER_UNLOCK_PRICE_INR = 1;
         let currentStory = null;
         let currentChapter = null;
+        let currentUser = null;
 
         // Check authentication
-        function checkAuth() {
-            const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-            if (!token) {
+        async function ensureAuthenticated() {
+            const response = await fetch('/api/users/me');
+            if (!response.ok) {
                 window.location.href = 'login.html';
+                return false;
+            }
+            return true;
+        }
+
+        async function loadCurrentUser() {
+            if (currentUser) {
+                return currentUser;
+            }
+
+            try {
+                const response = await fetch('/api/users/me');
+
+                if (!response.ok) {
+                    return null;
+                }
+
+                currentUser = await response.json();
+                return currentUser;
+            } catch (error) {
+                console.error('Failed to load current user:', error);
                 return null;
             }
-            return token;
         }
 
         // Get story ID from URL
@@ -309,18 +332,14 @@
         // Load story data
         async function loadStory() {
             try {
-                const token = checkAuth();
-                let response;
-
-                if (token) {
-                    response = await fetch(`/api/stories/${storyId}`, {
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
-                    });
+                const isAuthenticated = await ensureAuthenticated();
+                if (!isAuthenticated) {
+                    return;
                 }
 
-                if (!response || !response.ok) {
+                let response = await fetch(`/api/stories/${storyId}`);
+
+                if (!response.ok) {
                     response = await fetch(`/api/stories/public/${storyId}`);
                 }
 
@@ -340,7 +359,7 @@
         // Display story information
         function displayStory(story) {
             document.getElementById('story-title').textContent = story.title;
-            document.getElementById('story-author').textContent = story.author.name;
+            document.getElementById('story-author').textContent = story.createdBy || story.author.name;
             document.getElementById('story-genre').textContent = story.genre;
             document.getElementById('story-date').textContent = new Date(story.createdAt).toLocaleDateString();
 
@@ -419,9 +438,9 @@
         }
 
         // Show purchase modal
-        function showPurchaseModal(chapterId, chapterTitle, price) {
+        function showPurchaseModal(chapterId, chapterTitle, price = CHAPTER_UNLOCK_PRICE_INR) {
             document.getElementById('purchase-chapter-title').textContent = chapterTitle;
-            document.getElementById('purchase-price').textContent = `$${Number(price || 0).toFixed(2)}`;
+            document.getElementById('purchase-price').textContent = `₹${Number(price || 0).toFixed(2)}`;
             document.getElementById('purchase-modal').dataset.chapterId = chapterId;
             document.getElementById('purchase-modal').classList.add('show');
         }
@@ -434,16 +453,15 @@
         // Confirm purchase
         async function confirmPurchase() {
             try {
-                const token = checkAuth();
-                if (!token) return;
+                const isAuthenticated = await ensureAuthenticated();
+                if (!isAuthenticated) return;
 
                 const chapterId = document.getElementById('purchase-modal').dataset.chapterId;
 
-                const response = await fetch('/api/purchases', {
+                const orderResponse = await fetch('/api/purchases/create-order', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
                         storyId: storyId,
@@ -452,15 +470,67 @@
                     })
                 });
 
-                const data = await response.json();
-
-                if (response.ok) {
-                    alert('Purchase successful!');
-                    closePurchaseModal();
-                    loadStory(); // Reload to show purchased chapter
-                } else {
-                    alert(data.error || 'Purchase failed');
+                const orderData = await orderResponse.json();
+                if (!orderResponse.ok) {
+                    alert(orderData.error || 'Failed to create payment order');
+                    return;
                 }
+
+                const user = await loadCurrentUser();
+                const chapter = (currentStory?.chapters || []).find(item => String(item._id) === String(chapterId));
+
+                const options = {
+                    key: orderData.keyId,
+                    amount: orderData.amount,
+                    currency: orderData.currency,
+                    name: 'PixelScript',
+                    description: `Unlock chapter: ${chapter?.title || 'Chapter'}`,
+                    order_id: orderData.orderId,
+                    prefill: {
+                        name: user?.name || '',
+                        email: user?.email || ''
+                    },
+                    theme: {
+                        color: '#3f6d71'
+                    },
+                    handler: async function(response) {
+                        const verifyResponse = await fetch('/api/purchases/verify-payment', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_signature: response.razorpay_signature,
+                                storyId,
+                                chapterId,
+                                purchaseType: 'chapter'
+                            })
+                        });
+
+                        const verifyData = await verifyResponse.json();
+                        if (!verifyResponse.ok || !verifyData.success) {
+                            alert(verifyData.error || 'Payment verification failed');
+                            return;
+                        }
+
+                        alert('Payment successful. Chapter unlocked.');
+                        closePurchaseModal();
+                        loadStory();
+                    },
+                    modal: {
+                        ondismiss: function() {
+                            console.log('Razorpay checkout closed');
+                        }
+                    }
+                };
+
+                const razorpay = new Razorpay(options);
+                razorpay.on('payment.failed', function(response) {
+                    alert(response.error.description || 'Payment failed');
+                });
+                razorpay.open();
             } catch (error) {
                 console.error('Purchase error:', error);
                 alert('Purchase failed');
@@ -498,7 +568,7 @@
                 showPurchaseModal(
                     chapterId,
                     decodeURIComponent(source.dataset.chapterTitle || ''),
-                    currentStory?.price
+                    CHAPTER_UNLOCK_PRICE_INR
                 );
             }
         });

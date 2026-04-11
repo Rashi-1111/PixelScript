@@ -1,19 +1,15 @@
-const mongoose = require('mongoose');
-require('dotenv').config();
+require("dotenv").config();
+const mongoose = require("mongoose");
 
-const connectDB = async () => {
-    try {
-        const conn = await mongoose.connect(process.env.MONGODB_URI);
-        console.log(`MongoDB Connected: ${conn.connection.host}`);
-        
-        // Test the connection by trying to list collections
-        const collections = await conn.connection.db.listCollections().toArray();
-        console.log('Available collections:', collections.map(c => c.name));
-        
-    } catch (error) {
-        console.error('MongoDB connection error:', error);
-        process.exit(1);
-    }
+const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+if (!mongoUri) {
+    throw new Error('Missing MONGO_URI (or MONGODB_URI) environment variable');
+}
+
+const connectDB = () => {
+    mongoose.connect(mongoUri)
+        .then(() => console.log("Connected to Atlas 🚀"))
+        .catch(err => console.log(err));
 };
 
 module.exports = connectDB;

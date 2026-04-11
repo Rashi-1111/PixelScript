@@ -6,10 +6,33 @@ const Work = require('../models/Work');
 const Collaboration = require('../models/Collaboration');
 const auth = require('../middleware/auth');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const { createDiskStorage } = require('../services/storage');
+
+const jwtSecret = process.env.JWT_SECRET;
+if (!jwtSecret) {
+    throw new Error('Missing JWT_SECRET environment variable');
+}
+
+const AUTH_COOKIE_NAME = 'ps_auth';
+const AUTH_COOKIE_OPTIONS = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 24 * 60 * 60 * 1000
+};
+
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many authentication attempts. Please try again later.' }
+});
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const allowedDocumentTypes = [
@@ -106,7 +129,7 @@ function sanitizeWork(work) {
 }
 
 // Login user
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
     try {
         const { email, password } = req.body;
 
@@ -137,14 +160,15 @@ router.post('/login', async (req, res) => {
 
         const token = jwt.sign(
             { userId: user._id, role: user.role },
-            process.env.JWT_SECRET || 'your-secret-key',
+            jwtSecret,
             { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
         );
+
+        res.cookie(AUTH_COOKIE_NAME, token, AUTH_COOKIE_OPTIONS);
 
         res.json({
             success: true,
             message: 'Login successful',
-            token,
             user: sanitizeUser(user)
         });
     } catch (error) {
@@ -156,8 +180,19 @@ router.post('/login', async (req, res) => {
     }
 });
 
+router.post('/logout', (req, res) => {
+    res.clearCookie(AUTH_COOKIE_NAME, {
+        httpOnly: AUTH_COOKIE_OPTIONS.httpOnly,
+        secure: AUTH_COOKIE_OPTIONS.secure,
+        sameSite: AUTH_COOKIE_OPTIONS.sameSite,
+        path: AUTH_COOKIE_OPTIONS.path
+    });
+
+    res.json({ success: true, message: 'Logged out' });
+});
+
 // Register new user
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
     try {
         const { username, email, password, name, role } = req.body;
 

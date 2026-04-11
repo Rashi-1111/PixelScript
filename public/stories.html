@@ -226,23 +226,11 @@
 
         // Check authentication and get user info
         async function checkAuth() {
-            const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-            if (!token) {
-                window.location.href = 'login.html';
-                return null;
-            }
-
             try {
-                const response = await fetch('/api/users/me', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
+                const response = await fetch('/api/users/me');
 
                 if (!response.ok) {
                     if (response.status === 401) {
-                        localStorage.removeItem('token');
-                        sessionStorage.removeItem('token');
                         window.location.href = 'login.html';
                         return null;
                     }
@@ -251,7 +239,7 @@
 
                 const user = await response.json();
                 document.getElementById('user-role-badge').textContent = user.role.charAt(0).toUpperCase() + user.role.slice(1);
-                return token;
+                return true;
             } catch (error) {
                 console.error('Auth check error:', error);
                 return null;
@@ -261,8 +249,8 @@
         // Load stories
         async function loadStories() {
             try {
-                const token = await checkAuth();
-                if (!token) return;
+                const isAuthenticated = await checkAuth();
+                if (!isAuthenticated) return;
 
                 const response = await fetch('/api/stories/published');
 
@@ -304,7 +292,7 @@
                     <div class="story-cover" style="background-image: url('${story.coverImage || 'images/default-cover.png'}')"></div>
                     <div class="story-info">
                         <h3 class="story-title">${story.title}</h3>
-                        <div class="story-author">by ${story.author.name}</div>
+                        <div class="story-author">Created by ${story.createdBy || story.author.name}</div>
                         <div class="story-description">${story.description}</div>
                         <div class="story-meta">
                             <span class="story-genre">${story.genre}</span>
@@ -328,7 +316,7 @@
                 const matchesSearch = !searchTerm ||
                     story.title.toLowerCase().includes(searchTerm) ||
                     story.description.toLowerCase().includes(searchTerm) ||
-                    story.author.name.toLowerCase().includes(searchTerm);
+                    (story.createdBy || story.author.name).toLowerCase().includes(searchTerm);
 
                 return matchesGenre && matchesSearch;
             });

@@ -19,8 +19,27 @@ const workspaceSchema = new mongoose.Schema({
         },
         message: {
             type: String,
-            required: true,
+            default: '',
             trim: true
+        },
+        attachment: {
+            name: {
+                type: String,
+                trim: true,
+                default: ''
+            },
+            url: {
+                type: String,
+                default: ''
+            },
+            type: {
+                type: String,
+                default: 'application/octet-stream'
+            },
+            size: {
+                type: Number,
+                default: 0
+            }
         },
         sentAt: {
             type: Date,

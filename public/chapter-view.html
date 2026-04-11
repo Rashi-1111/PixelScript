@@ -9,14 +9,14 @@
     <link rel="stylesheet" href="css/style.css">
     <style>
         :root {
-            --reader-bg: #f4efe6;
+            --reader-bg: #3f6d71;
             --reader-text: #1f1912;
             --reader-muted: rgba(31, 25, 18, 0.66);
-            --chrome-bg: rgba(255, 252, 246, 0.84);
+            --chrome-bg: rgba(241, 244, 248, 0.84);
             --chrome-border: rgba(62, 47, 28, 0.12);
             --chip-bg: rgba(31, 25, 18, 0.08);
             --chip-text: #221b13;
-            --panel-bg: #f6f1e8;
+            --panel-bg: #d9e5ed;
             --panel-surface: #fffdf9;
             --nav-bg: rgba(31, 25, 18, 0.78);
             --nav-text: #fff;
@@ -304,10 +304,6 @@
         const themeStorageKey = 'pixelscript-reader-theme';
         let lastScrollY = 0;
 
-        function getToken() {
-            return localStorage.getItem('token') || sessionStorage.getItem('token');
-        }
-
         function getChapterPanels(story, chapter) {
             const chapterPanels = Array.isArray(chapter?.panels) ? chapter.panels.filter(panel => panel?.imageUrl) : [];
             if (chapterPanels.length) {
@@ -430,16 +426,9 @@
                 return;
             }
 
-            let response;
-            const token = getToken();
+            let response = await fetch(`/api/stories/${storyId}`);
 
-            if (token) {
-                response = await fetch(`/api/stories/${storyId}`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-            }
-
-            if (!response || !response.ok) {
+            if (!response.ok) {
                 response = await fetch(`/api/stories/public/${storyId}`);
             }
 
@@ -459,7 +448,7 @@
 
             document.getElementById('back-link').href = `reader.html?id=${storyId}`;
             document.getElementById('story-title').textContent = story.title;
-            document.getElementById('story-detail-line').textContent = `${story.author.name} | ${story.genre} | ${new Date(story.createdAt).toLocaleDateString()}`;
+            document.getElementById('story-detail-line').textContent = `${story.createdBy || story.author.name} | ${story.genre} | ${new Date(story.createdAt).toLocaleDateString()}`;
             document.getElementById('chapter-meta-top').textContent = `Chapter ${chapter.order}`;
 
             renderPanels(story, chapter);

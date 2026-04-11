@@ -1,6 +1,8 @@
 const express = require('express');
 const multer = require('multer');
 const Workspace = require('../models/Workspace');
+const Collaboration = require('../models/Collaboration');
+const auth = require('../middleware/auth');
 const { createDiskStorage, buildPublicFileUrl } = require('../services/storage');
 
 const router = express.Router();
@@ -19,8 +21,33 @@ async function findOrCreateWorkspace(room) {
     return workspace;
 }
 
-router.get('/:room', async (req, res) => {
+async function canAccessRoom(user, room) {
+    if (!user || !room) {
+        return false;
+    }
+
+    if (user.role === 'admin') {
+        return true;
+    }
+
+    const collaboration = await Collaboration.findOne({ room })
+        .select('artist writer')
+        .lean();
+
+    if (!collaboration) {
+        return false;
+    }
+
+    const userId = String(user._id || user.id || user.userId || '');
+    return String(collaboration.artist) === userId || String(collaboration.writer) === userId;
+}
+
+router.get('/:room', auth, async (req, res) => {
     try {
+        if (!(await canAccessRoom(req.user, req.params.room))) {
+            return res.status(403).json({ error: 'Not authorized for this workspace' });
+        }
+
         const workspace = await Workspace.findOne({ room: req.params.room }).lean();
 
         res.json(workspace || {
@@ -35,8 +62,12 @@ router.get('/:room', async (req, res) => {
     }
 });
 
-router.put('/:room', async (req, res) => {
+router.put('/:room', auth, async (req, res) => {
     try {
+        if (!(await canAccessRoom(req.user, req.params.room))) {
+            return res.status(403).json({ error: 'Not authorized for this workspace' });
+        }
+
         const workspace = await findOrCreateWorkspace(req.params.room);
 
         if (typeof req.body.canvasState === 'string') {
@@ -45,11 +76,19 @@ router.put('/:room', async (req, res) => {
 
         if (Array.isArray(req.body.chat)) {
             workspace.chat = req.body.chat
-                .filter(item => item && item.message)
+                .filter(item => item && (item.message || item.attachment?.url))
                 .slice(-100)
                 .map(item => ({
                     sender: item.sender || 'Collaborator',
-                    message: String(item.message).trim(),
+                    message: String(item.message || '').trim(),
+                    attachment: item.attachment?.url
+                        ? {
+                            name: String(item.attachment.name || '').trim(),
+                            url: String(item.attachment.url || '').trim(),
+                            type: String(item.attachment.type || 'application/octet-stream').trim(),
+                            size: Number(item.attachment.size) || 0
+                        }
+                        : undefined,
                     sentAt: item.sentAt ? new Date(item.sentAt) : new Date()
                 }));
         }
@@ -62,8 +101,12 @@ router.put('/:room', async (req, res) => {
     }
 });
 
-router.post('/:room/assets', workspaceUpload.single('file'), async (req, res) => {
+router.post('/:room/assets', auth, workspaceUpload.single('file'), async (req, res) => {
     try {
+        if (!(await canAccessRoom(req.user, req.params.room))) {
+            return res.status(403).json({ error: 'Not authorized for this workspace' });
+        }
+
         if (!req.file) {
             return res.status(400).json({ error: 'No file uploaded' });
         }

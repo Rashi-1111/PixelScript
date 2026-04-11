@@ -108,6 +108,10 @@ const collaborationSchema = new mongoose.Schema({
     canvas: {
         type: String
     },
+    coverImage: {
+        type: String,
+        default: ''
+    },
     storyTitle: {
         type: String,
         trim: true,
@@ -152,6 +156,36 @@ const collaborationSchema = new mongoose.Schema({
         story: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Story'
+        }
+    },
+    storyActionRequest: {
+        type: {
+            type: String,
+            enum: ['edit', 'delete', ''],
+            default: ''
+        },
+        status: {
+            type: String,
+            enum: ['pending', 'approved', 'rejected', ''],
+            default: ''
+        },
+        requestedAt: Date,
+        requestedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        },
+        artistApproved: {
+            type: Boolean,
+            default: false
+        },
+        writerApproved: {
+            type: Boolean,
+            default: false
+        },
+        resolvedAt: Date,
+        resolvedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
         }
     },
     rating: {
